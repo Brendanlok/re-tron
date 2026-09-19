@@ -1,4 +1,4 @@
-// Detron arena server: one Cloudflare Durable Object runs the one shared arena and is the referee for every move.
+// Re-Tron arena server: one Cloudflare Durable Object runs the one shared arena and is the referee for every move.
 // Clients only send inputs (join / turn / blade); every tick the server moves all bikes and broadcasts the result.
 
 const W = 40, H = 60, TICK_MS = 100;
@@ -20,7 +20,7 @@ export default {
       // ponytail: one arena for everyone; open a second one by name when MAX_HUMANS is actually hit
       return env.ARENA.get(env.ARENA.idFromName('main')).fetch(req);
     }
-    return new Response('Detron arena server', {status: url.pathname === '/' ? 200 : 404});
+    return new Response('Re-Tron arena server', {status: url.pathname === '/' ? 200 : 404});
   },
 };
 

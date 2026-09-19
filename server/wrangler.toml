@@ -1,4 +1,4 @@
-name = "detron"
+name = "re-tron"
 main = "src/index.js"
 compatibility_date = "2025-09-01"
 

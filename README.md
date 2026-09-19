@@ -1,4 +1,4 @@
-# Detron
+# Re-Tron
 
 Online light cycles: one shared arena, join any time.
 

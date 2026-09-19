@@ -1,4 +1,4 @@
-// Smoke test for the Detron arena server: two players, blade charge cycle, crashes, leaving.
+// Smoke test for the Re-Tron arena server: two players, blade charge cycle, crashes, leaving.
 const URL_ = process.argv[2] || 'ws://localhost:8787/ws';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const assert = (c, m) => { if (!c) { console.log('FAIL', m); process.exitCode = 1; } else console.log('ok  ', m); };
