@@ -1,6 +1,11 @@
 # Detron
 
-Light cycles, in reverse. Game #3 of the inverted-classics collection.
-The arena starts solid and your cycle carves a tunnel wherever it goes. Hit any tunnel (yours or a rival's) or the edge and you're out. Last one moving wins. Solo against 3 bots.
+Online light cycles: one shared arena, join any time.
 
-Single index.html, no build step. Live via GitHub Pages from main: https://brendanlok.github.io/tron/
+Your bike leaves nothing behind until you switch on the blade. Then it lays a wall that knocks out anyone who rides into it, you included. The blade runs on charge: about 3s of wall per full charge, 6s to recharge, and a 1s wait if you run it dry. Bots top the arena up to 6 bikes when it is quiet. Barricades fade after 8s and vanish when their owner is knocked out.
+
+- `index.html` — the game page (GitHub Pages: https://brendanlok.github.io/tron/), no build step.
+- `server/` — the arena, a Cloudflare Worker + Durable Object that moves every bike and decides every crash.
+  - Deploy: `cd server && npx wrangler deploy`
+  - Run locally: `cd server && npx wrangler dev` then serve this folder and open it.
+  - Check: `node server/test-arena.mjs` against a running server.

@@ -3,19 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>Detron — Light cycles, in reverse</title>
-<meta name="description" content="Light cycles, in reverse. The arena starts solid and your cycle carves a tunnel wherever it goes. Hit any tunnel or the edge and you're out. Last one moving wins.">
+<title>Detron — light cycles, one shared arena</title>
+<meta name="description" content="Online light cycles. Your bike leaves nothing behind until you switch on the blade — then it lays a wall that takes out anyone who hits it, you included. The blade runs on charge.">
 <meta name="theme-color" content="#0a0e14">
 <style>
-  /* Palette, tiles and buttons copied from Snaked (itself copied from Breakin) so the collection reads as one family. */
+  /* Palette, tiles and buttons copied from Snaked (itself from Breakin) so the collection reads as one family. */
   [hidden]{display:none!important;}
   html,body{margin:0;height:100%;background:#0a0e14;overflow:hidden;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
     touch-action:none;-webkit-user-select:none;user-select:none;}
-  #wrap{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center;
-    padding-top:calc(76px + env(safe-area-inset-top,0px));}
-  canvas{background:#0d1420;display:block;touch-action:none;
-    box-shadow:0 0 80px rgba(80,140,255,.18);border-radius:4px;}
+  canvas{position:fixed;inset:0;display:block;touch-action:none;}
   #hud{position:fixed;top:calc(9px + env(safe-area-inset-top,0px));left:0;right:0;display:flex;z-index:30;
     justify-content:center;gap:7px;padding:0 8px;pointer-events:none;font-variant-numeric:tabular-nums;}
   #hud .stat{display:flex;flex-direction:column;align-items:center;min-width:50px;
@@ -24,232 +21,236 @@
   #hud .stat b{font-size:27px;font-weight:800;line-height:1;text-shadow:0 0 16px currentColor;}
   #hud .stat i{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:#7f8ca0;font-style:normal;margin-top:4px;}
   #hud .st-time b{color:#57d3ff;min-width:52px;text-align:center;}
-  #hud .st-riv b{color:#b98bff;}
-  #overlay{position:fixed;inset:0;display:flex;flex-direction:column;
+  #hud .st-ko b{color:#b98bff;}
+  #hud .st-chg b{color:#ffd25f;}
+  #hud .st-chg .bar{width:52px;height:4px;border-radius:2px;background:rgba(255,210,95,.2);margin-top:5px;overflow:hidden;}
+  #hud .st-chg .bar span{display:block;height:100%;background:#ffd25f;box-shadow:0 0 8px #ffd25f;}
+  #hud .st-chg.empty b,#hud .st-chg.empty .bar span{color:#ff9d8a;background:#ff9d8a;}
+  /* live top five, in the corner: Snaked's chasing panel */
+  #board{position:fixed;z-index:28;top:calc(78px + env(safe-area-inset-top,0px));right:8px;box-sizing:border-box;
+    width:124px;padding:8px 9px 6px;border-radius:12px;background:rgba(10,15,24,.72);border:1px solid rgba(120,150,200,.16);
+    pointer-events:none;font-variant-numeric:tabular-nums;}
+  #board .ct{color:#67788f;font-size:9px;letter-spacing:.2em;text-transform:uppercase;margin-bottom:6px;text-align:center;}
+  #board .row{display:flex;align-items:baseline;justify-content:space-between;gap:6px;padding:2px 0;font-size:12px;color:#c4cedd;}
+  #board .row .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  #board .row.bot{color:#6b7a90;}
+  #board .row.you,#board .row.you b{color:#57d3ff;}
+  #board .row b{font-weight:800;color:#e8edf4;}
+  #overlay{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;
     align-items:center;justify-content:flex-start;color:#e8edf4;text-align:center;
-    padding:calc(24px + env(safe-area-inset-top,0px)) 24px calc(24px + env(safe-area-inset-bottom,0px));
-    overflow-y:auto;
+    padding:calc(24px + env(safe-area-inset-top,0px)) 24px calc(24px + env(safe-area-inset-bottom,0px));overflow-y:auto;
     background:radial-gradient(ellipse 78% 56% at 50% 40%,
       rgba(9,12,18,.8) 0%, rgba(9,12,18,.62) 46%, rgba(9,12,18,.12) 100%);
     -webkit-backdrop-filter:blur(2.5px);backdrop-filter:blur(2.5px);}
+  #overlay>:first-child{margin-top:auto;} #overlay>:last-child{margin-bottom:auto;}
   #overlay .badge{font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:#5f86b8;margin-bottom:6px;}
   #overlay h1{font-size:clamp(36px,12vw,50px);margin:0 0 8px;font-weight:800;letter-spacing:.14em;
     color:#eaf2ff;text-shadow:0 0 32px rgba(95,176,255,.5),0 2px 0 rgba(0,0,0,.35);}
-  #overlay p{margin:4px 0;color:#9fadc1;font-size:14px;max-width:300px;line-height:1.5;
-    text-shadow:0 1px 6px rgba(6,9,14,.9);}
+  #overlay p{margin:4px 0;color:#9fadc1;font-size:14px;max-width:310px;line-height:1.5;text-shadow:0 1px 6px rgba(6,9,14,.9);}
   #overlay b{color:#e8edf4;}
-  #overlay>:first-child{margin-top:auto;} #overlay>:last-child{margin-bottom:auto;}
   #stats{margin:8px 0 2px;color:#9fadc1;font-size:14px;}
   #stats b{color:#ffd25f;font-size:20px;}
-  #startBtn{margin:16px 0 0;padding:12px 54px;color:#05121f;border:0;border-radius:999px;cursor:pointer;
+  #nameRow{margin:14px 0 0;}
+  #nameIn{padding:10px 12px;font-size:19px;border-radius:9px;border:1.5px solid #46587a;font-family:inherit;
+    width:168px;text-align:center;letter-spacing:.16em;text-transform:uppercase;font-weight:800;
+    color:#eaf2ff;background:#0f1724;outline:none;}
+  #nameIn::placeholder{color:#5a6a82;font-weight:600;letter-spacing:.02em;text-transform:none;opacity:1;}
+  #nameIn:focus{border-color:#5fb0ff;box-shadow:0 0 0 3px rgba(95,176,255,.22);}
+  #startBtn{margin:14px 0 0;padding:12px 54px;color:#05121f;border:0;border-radius:999px;cursor:pointer;
     display:flex;flex-direction:column;align-items:center;gap:2px;font-family:inherit;
     background:linear-gradient(180deg,#84c4ff,#48a2f3);
     box-shadow:0 10px 34px rgba(72,162,243,.42);animation:breathe 2.4s ease-in-out infinite;}
   #startBtn .lbl{font-size:18px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;line-height:1.1;}
   #startBtn .sub{font-size:10px;font-weight:700;letter-spacing:.04em;opacity:.6;}
   #startBtn:active{transform:scale(.96);}
+  #startBtn[disabled]{animation:none;opacity:.5;cursor:default;}
   @keyframes breathe{
     0%,100%{transform:scale(1);box-shadow:0 10px 34px rgba(72,162,243,.34);}
     50%{transform:scale(1.045);box-shadow:0 14px 46px rgba(72,162,243,.62);}}
   @media (prefers-reduced-motion:reduce){#startBtn{animation:none;}}
-  .how{font-size:12px!important;color:#6b7a90!important;margin-top:10px!important;}
-  #pad{position:fixed;left:0;right:0;margin:0 auto;max-width:480px;box-sizing:border-box;padding:0 12px;
-    bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:20;pointer-events:none;
-    display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,44px);gap:4px;touch-action:none;}
-  #pad .hub{grid-column:2;grid-row:2;background:rgba(120,160,220,.03);border-radius:14px;}
-  #pad.idle{visibility:hidden;}
+  #live{margin-top:10px!important;font-size:12px!important;color:#6b7a90!important;}
+  .how{font-size:12px!important;color:#6b7a90!important;margin-top:8px!important;}
+  /* controls: arrow pad on the left, blade on the right, both over the arena (the view follows your bike) */
+  #pad{position:fixed;left:calc(10px + env(safe-area-inset-left,0px));bottom:calc(14px + env(safe-area-inset-bottom,0px));
+    z-index:20;display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,52px);gap:4px;touch-action:none;pointer-events:none;}
   #pad button{display:flex;align-items:center;justify-content:center;padding:0;pointer-events:auto;
     color:rgba(230,240,255,.62);background:rgba(120,160,220,.13);border:1px solid rgba(120,160,220,.26);border-radius:14px;cursor:pointer;
     -webkit-tap-highlight-color:transparent;touch-action:none;}
-  #pad button svg{width:40px;height:40px;fill:currentColor;}
+  #pad button svg{width:34px;height:34px;fill:currentColor;}
   #pad button.on{background:rgba(120,160,220,.3);border-color:rgba(132,196,255,.6);color:rgba(240,246,255,.95);}
   #pad .u{grid-column:2;grid-row:1;} #pad .l{grid-column:1;grid-row:2;}
   #pad .d{grid-column:2;grid-row:3;} #pad .r{grid-column:3;grid-row:2;}
-  #sab{position:fixed;left:0;bottom:0;width:0;height:env(safe-area-inset-bottom,0px);pointer-events:none;}
-  #pause{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
-    background:rgba(6,9,14,.72);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);color:#8ba0bd;text-align:center;}
-  #pause .ptitle{font-size:15px;letter-spacing:.3em;text-transform:uppercase;}
-  #pause .phint{font-size:12px;color:#67788f;}
+  #blade{position:fixed;right:calc(14px + env(safe-area-inset-right,0px));bottom:calc(30px + env(safe-area-inset-bottom,0px));
+    z-index:20;width:104px;height:104px;border-radius:50%;cursor:pointer;font-family:inherit;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    color:#ffd25f;background:rgba(255,210,95,.12);border:2px solid rgba(255,210,95,.4);
+    -webkit-tap-highlight-color:transparent;touch-action:none;}
+  #blade .bl{font-size:13px;font-weight:800;letter-spacing:.12em;}
+  #blade .bs{font-size:9px;font-weight:700;letter-spacing:.06em;color:#a8935f;}
+  #blade.on{color:#05121f;background:#ffd25f;border-color:#ffd25f;box-shadow:0 0 34px rgba(255,210,95,.6);}
+  #blade.on .bs{color:rgba(5,18,31,.65);}
+  #blade.flat{opacity:.45;}
+  #hint{position:fixed;left:0;right:0;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:19;text-align:center;
+    color:#5c6a80;font-size:11px;letter-spacing:.04em;pointer-events:none;}
 </style>
 </head>
 <body>
-<div id="wrap"><canvas id="cv"></canvas></div>
+<canvas id="cv"></canvas>
 <div id="hud" hidden>
-  <div class="stat st-time"><b id="hTime">0.0</b><i>time</i></div>
-  <div class="stat st-riv"><b id="hRiv">3</b><i>rivals</i></div>
+  <div class="stat st-time"><b id="hTime">0.0</b><i>alive</i></div>
+  <div class="stat st-ko"><b id="hKo">0</b><i>knockouts</i></div>
+  <div class="stat st-chg" id="chgTile"><b id="hChg">100</b><i>charge</i><div class="bar"><span id="chgFill"></span></div></div>
 </div>
-<div id="pad" class="idle">
+<div id="board" hidden></div>
+<div id="pad" hidden>
   <button class="u" data-d="U" aria-label="up"><svg viewBox="0 0 24 24"><path d="M12 5l8 10H4z"/></svg></button>
   <button class="l" data-d="L" aria-label="left"><svg viewBox="0 0 24 24"><path d="M5 12l10-8v16z"/></svg></button>
-  <div class="hub" aria-hidden="true"></div>
   <button class="d" data-d="D" aria-label="down"><svg viewBox="0 0 24 24"><path d="M12 19L4 9h16z"/></svg></button>
   <button class="r" data-d="R" aria-label="right"><svg viewBox="0 0 24 24"><path d="M19 12L9 20V4z"/></svg></button>
 </div>
-<div id="sab"></div>
-<div id="pause" hidden><div class="ptitle">Paused</div><div class="phint" id="pHint">tap anywhere to carry on</div></div>
+<button id="blade" hidden><span class="bl">BLADE</span><span class="bs" id="bladeSub">tap to deploy</span></button>
+<div id="hint" hidden></div>
 <div id="overlay">
-  <div class="badge" id="badge">Light cycles, in reverse</div>
+  <div class="badge" id="badge">Light cycles &middot; one shared arena</div>
   <h1 id="title">DETRON</h1>
-  <p id="msg">The arena starts solid. <b>Your cycle carves a tunnel wherever it goes.</b> Hit any tunnel &mdash; yours or a rival&rsquo;s &mdash; or the edge, and you&rsquo;re out. Last one moving wins.</p>
+  <p id="msg">Everyone rides in the same arena, and you can join any time. Your bike leaves nothing behind &mdash; <b>until you switch on the blade.</b> Then it lays a wall that takes out anyone who rides into it, you included. The blade runs on charge, so pick your moment.</p>
   <div id="stats" hidden></div>
-  <button id="startBtn"><span class="lbl" id="startLbl">Play</span><span class="sub" id="startSub">click to start</span></button>
+  <div id="nameRow"><input id="nameIn" maxlength="8" placeholder="your name" autocomplete="off" spellcheck="false" autocapitalize="characters" autocorrect="off" aria-label="Your name, up to 8 letters or numbers"></div>
+  <button id="startBtn" disabled><span class="lbl" id="startLbl">Ride</span><span class="sub" id="startSub">connecting…</span></button>
+  <p id="live"></p>
   <p class="how" id="how"></p>
 </div>
 <script>
-// ---- rules -----------------------------------------------------------------------------
-// ponytail: prototype - no sound, leaderboard, pause menu or offline copy yet; add them once the core rule is kept.
-const COLS = 18, ROWS = 28, CELL = 20, W = COLS * CELL, H = ROWS * CELL;
-const DIRS = {U: [0, -1], D: [0, 1], L: [-1, 0], R: [1, 0]}, BACK = {U: 'D', D: 'U', L: 'R', R: 'L'};
-const COLORS = [[87, 211, 255], [185, 139, 255], [255, 122, 192], [255, 157, 92]];   // you (cyan), then the three bots
-const START = [[9, 24, 'U'], [8, 3, 'D'], [2, 14, 'R'], [15, 13, 'L']];              // bottom, top, left, right
-const MS_START = 125, MS_END = 80, RAMP_S = 60;                                       // speeds up over the first minute
-const COUNT_S = 3;
+// Online game: the arena lives on the server (server/src/index.js). This page sends inputs and draws what comes back.
+const SERVER = /github\.io$/.test(location.hostname) ? 'wss://detron.chanlokk97.workers.dev/ws' : 'ws://localhost:8787/ws';
+const $ = id => document.getElementById(id);
 const isTouch = matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints > 0 || /[?&]touch/.test(location.search);
+const DIRN = ['U', 'D', 'L', 'R'], BACK = {U: 'D', D: 'U', L: 'R', R: 'L'};
+const MINE = [87, 211, 255];   // you are always cyan
+const PALETTE = [[185, 139, 255], [255, 122, 192], [255, 157, 92], [255, 210, 95], [120, 230, 160], [255, 95, 110], [150, 170, 255], [120, 200, 255]];
+const rgb = (c, a) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (a === undefined ? 1 : a) + ')';
 
-let grid, cycles, mode = 'attract', elapsed = 0, acc = 0, queue = [], countT = 0, endT = 0, parts = [], place = 0;
-const cx = i => i % COLS, cy = i => (i / COLS) | 0;
-function step1(i, d) {
-  const x = cx(i) + DIRS[d][0], y = cy(i) + DIRS[d][1];
-  return x < 0 || y < 0 || x >= COLS || y >= ROWS ? -1 : y * COLS + x;
-}
-const interval = () => MS_START - (MS_START - MS_END) * Math.min(1, elapsed / RAMP_S);
+let W = 40, H = 60, WALL_TICKS = 80, TICK_MS = 100;
+let ws = null, me = 0, tick = 0, tickAt = 0, bikes = new Map(), walls = new Map(), names = new Map();
+let myStart = 0, myKos = 0, riding = false, parts = [], bladeOn = false, retry = null;
 
-function newRound(withPlayer) {
-  grid = new Uint8Array(COLS * ROWS);   // 0 = solid rock, n = tunnel carved by cycle n
-  cycles = START.map(([x, y, d], k) => {
-    const i = y * COLS + x;
-    grid[i] = k + 1;
-    return {id: k + 1, i, prev: i, dir: d, alive: true, bot: k > 0 || !withPlayer, path: [i], col: COLORS[k], skill: 0.75 + Math.random() * 0.25};
-  });
-  elapsed = 0; acc = 0; queue = []; parts = []; place = 0;
+// ---- server ------------------------------------------------------------------------------
+function connect() {
+  ws = new WebSocket(SERVER);
+  ws.onopen = () => { $('startSub').textContent = isTouch ? 'tap to join' : 'click to join'; $('startBtn').disabled = false; };
+  ws.onmessage = e => onMsg(JSON.parse(e.data));
+  ws.onclose = () => {
+    $('startBtn').disabled = true; $('startSub').textContent = 'reconnecting…';
+    if (riding) { riding = false; showResult(null, 'lost'); }
+    bikes.clear(); walls.clear();
+    clearTimeout(retry); retry = setTimeout(connect, 2000);
+  };
+  ws.onerror = () => ws.close();
 }
+const send = m => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
 
-// ---- bots ------------------------------------------------------------------------------
-// Each move: try every turn that doesn't crash straight away, score it by how much rock it can still reach
-// (a capped flood fill), keep going straight on ties, and now and then pick a worse move so bots aren't perfect.
-function reach(from, cap) {
-  const seen = new Uint8Array(COLS * ROWS), q = [from]; seen[from] = 1;
-  for (let qi = 0; qi < q.length && q.length < cap; qi++)
-    for (const d in DIRS) { const j = step1(q[qi], d); if (j >= 0 && !seen[j] && !grid[j]) { seen[j] = 1; q.push(j); } }
-  return q.length;
-}
-function botDir(c) {
-  let best = c.dir, bestScore = -1;
-  for (const d in DIRS) {
-    if (d === BACK[c.dir]) continue;
-    const j = step1(c.i, d);
-    if (j < 0 || grid[j]) continue;
-    let s = reach(j, 220) + (d === c.dir ? 3 : 0) + Math.random() * 6;
-    for (const o of cycles) if (o !== c && o.alive && Math.abs(cx(o.i) - cx(j)) + Math.abs(cy(o.i) - cy(j)) === 1) s -= 40;   // don't meet a head
-    if (Math.random() > c.skill) s = Math.random() * 50;                                                             // a slip
-    if (s > bestScore) { bestScore = s; best = d; }
-  }
-  return best;
-}
-
-// ---- one move for everyone at once ------------------------------------------------------
-function tick() {
-  const live = cycles.filter(c => c.alive);
-  for (const c of live) {
-    if (c.bot) c.dir = botDir(c);
-    else while (queue.length) { const d = queue.shift(); if (d !== BACK[c.dir] && d !== c.dir) { c.dir = d; break; } }
-    c.next = step1(c.i, c.dir);
-  }
-  const hits = {};
-  for (const c of live) if (c.next >= 0) hits[c.next] = (hits[c.next] || 0) + 1;
-  const dead = live.filter(c => c.next < 0 || grid[c.next] || hits[c.next] > 1);
-  for (const c of live) {
-    c.prev = c.i;
-    if (dead.includes(c)) continue;
-    c.i = c.next; grid[c.i] = c.id; c.path.push(c.i);
-  }
-  for (const c of dead) crash(c, live.length - dead.length + 1);
-}
-function crash(c, finish) {
-  c.alive = false; c.prev = c.i;
-  if (!c.bot) place = finish;
-  const x = (cx(c.i) + 0.5) * CELL, y = (cy(c.i) + 0.5) * CELL;
-  for (let k = 0; k < 26; k++) {
-    const a = Math.random() * Math.PI * 2, v = 40 + Math.random() * 140;
-    parts.push({x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.5 + Math.random() * 0.5, col: rgb(c.col)});
+function onMsg(m) {
+  if (m.t === 'hi') {
+    W = m.W; H = m.H; WALL_TICKS = m.wallTicks; TICK_MS = m.tickMs; tick = m.k;
+    walls.clear(); bikes.clear();
+    for (const [c, o, born] of m.walls) walls.set(c, {o, born});
+    for (const [id, n, bot] of m.names) names.set(id, {n, bot});
+    for (const b of m.bikes) setBike(b);
+  } else if (m.t === 'you') {
+    me = m.id; riding = true; myStart = tick; myKos = 0; bladeOn = false; paint();
+    $('overlay').hidden = true; $('hud').hidden = $('board').hidden = $('hint').hidden = false;
+    $('blade').hidden = $('pad').hidden = !isTouch;   // on a computer the space bar is the blade
+  } else if (m.t === 'full') {
+    $('startSub').textContent = 'arena is full — try again';
+  } else if (m.t === 'k') {
+    tick = m.k; tickAt = performance.now();
+    for (const [id, n, bot] of m.n || []) names.set(id, {n, bot});
+    const seen = new Set();
+    for (const b of m.b) { setBike(b); seen.add(b[0]); }
+    for (const id of [...bikes.keys()]) if (!seen.has(id)) bikes.delete(id);
+    for (const [c, o] of m.a || []) walls.set(c, {o, born: tick});
+    for (const id of m.c || []) for (const [c, w] of walls) if (w.o === id) walls.delete(c);
+    for (const [c, w] of walls) if (w.born + WALL_TICKS <= tick) walls.delete(c);
+    for (const ev of m.e || []) onOut(ev);
+    if (m.top) paintBoard(m.top);
+    if (m.on !== undefined) $('live').textContent = m.on + (m.on === 1 ? ' rider' : ' riders') + ' in the arena now';
+    paint();
   }
 }
-
-// ---- game flow ----------------------------------------------------------------------------
-function step(dt) {
-  for (const p of parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.94; p.vy *= 0.94; p.life -= dt; }
-  parts = parts.filter(p => p.life > 0);
-  if (mode === 'play' || mode === 'attract') {
-    elapsed += dt; acc += dt * 1000;
-    for (let g = 0; g < 8 && acc >= interval(); g++) { acc -= interval(); tick(); if (checkEnd()) break; }
-    if (mode === 'play') { $('hTime').textContent = elapsed.toFixed(1); $('hRiv').textContent = cycles.filter(c => c.bot && c.alive).length; }
-  } else if (mode === 'count') {
-    countT -= dt; if (countT <= 0) mode = 'play';
-  } else if (mode === 'over' || mode === 'attractOver') {
-    endT -= dt;
-    if (endT <= 0) { if (mode === 'attractOver') { newRound(false); mode = 'attract'; } else { mode = 'result'; showResult(); } }
+function setBike(a) {
+  const [id, x, y, d, blade, charge] = a, old = bikes.get(id);
+  bikes.set(id, {id, x, y, px: old ? old.x : x, py: old ? old.y : y, d: DIRN[d], blade: !!blade, charge});
+}
+function onOut([victim, killer, reason, score, ticksAlive, kos]) {
+  const b = bikes.get(victim) || {x: 0, y: 0};
+  if (reason !== 'left') burst(b.x, b.y, colOf(victim));
+  if (killer === me) myKos++;
+  if (victim === me) { riding = false; showResult({score, secs: ticksAlive / 10, kos}, reason, killer); }
+}
+function burst(x, y, col) {
+  for (let k = 0; k < 24; k++) {
+    const a = Math.random() * Math.PI * 2, v = 2 + Math.random() * 8;
+    parts.push({x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.5 + Math.random() * 0.5, col});
   }
 }
-function checkEnd() {
-  const live = cycles.filter(c => c.alive), me = cycles[0];
-  if (mode === 'play' && (!me.alive || live.length === 0 || (live.length === 1 && live[0] === me))) {
-    if (me.alive) place = 1;
-    mode = 'over'; endT = 1.1; pad.classList.add('idle'); return true;
-  }
-  if (mode === 'attract' && live.length <= 1) { mode = 'attractOver'; endT = 1.5; return true; }
-  return false;
-}
-function startPlay() {
-  newRound(true); mode = 'count'; countT = COUNT_S;
-  $('overlay').hidden = true; $('hud').hidden = false; pad.classList.remove('idle');
-  $('hTime').textContent = '0.0'; $('hRiv').textContent = 3;
-}
-function showResult() {
-  const won = place === 1 && cycles[0].alive;
-  const draw = place === 1 && !won;
-  $('badge').textContent = won ? 'last one moving' : draw ? 'everyone crashed at once' : 'you crashed';
-  $('title').textContent = won ? 'YOU WIN' : draw ? 'DRAW' : 'CRASHED';
-  $('msg').textContent = won ? 'Every rival carved themselves into a corner.' : 'Rock is road. Tunnels are walls.';
-  const s = $('stats'); s.hidden = false;
-  s.innerHTML = 'Place <b>' + place + '</b> of 4 &middot; Time <b>' + elapsed.toFixed(1) + 's</b>';
-  $('startLbl').textContent = 'Play again';
-  $('hud').hidden = true; $('overlay').hidden = false;
-}
-function pause() { if (mode !== 'play' && mode !== 'count') return; mode = 'paused'; queue = []; $('pause').hidden = false; }
-function resume() { $('pause').hidden = true; mode = 'count'; countT = COUNT_S; }
+const colOf = id => id === me ? MINE : PALETTE[id % PALETTE.length];
 
-// ---- input ------------------------------------------------------------------------------
-const $ = id => document.getElementById(id), pad = $('pad');
-if (!isTouch) pad.hidden = true;
+// ---- screens -----------------------------------------------------------------------------
+function showResult(s, reason, killer) {
+  const who = killer && names.get(killer) ? names.get(killer).n : 'someone';
+  const why = {wall: 'you hit ' + who + '’s blade', self: 'you hit your own blade', edge: 'you hit the arena wall',
+    head: 'head-on crash', lost: 'connection lost'}[reason] || 'you are out';
+  $('badge').textContent = why;
+  $('title').textContent = reason === 'lost' ? 'DISCONNECTED' : 'KNOCKED OUT';
+  $('msg').textContent = reason === 'lost' ? 'The arena dropped out. It reconnects on its own.'
+    : 'The arena keeps going without you. Jump back in.';
+  if (s) { $('stats').hidden = false; $('stats').innerHTML = 'Score <b>' + s.score + '</b> &middot; Alive <b>' + s.secs.toFixed(1) + 's</b> &middot; <b>' + s.kos + '</b> KO' + (s.kos === 1 ? '' : 's'); }
+  $('startLbl').textContent = 'Ride again';
+  $('overlay').hidden = false;
+  $('hud').hidden = $('board').hidden = $('blade').hidden = $('pad').hidden = $('hint').hidden = true;
+}
+function paintBoard(top) {
+  $('board').innerHTML = '<div class="ct">Top riders</div>' + top.map(([n, sc, bot]) =>
+    '<div class="row' + (bot ? ' bot' : '') + (names.get(me) && n === names.get(me).n ? ' you' : '') + '"><span class="nm">' +
+    n.replace(/[<&]/g, '') + '</span><b>' + sc + '</b></div>').join('');
+}
+function paint() {
+  const b = bikes.get(me);
+  $('hTime').textContent = riding ? ((tick - myStart) / 10).toFixed(1) : '0.0';
+  $('hKo').textContent = myKos;
+  if (b) {
+    $('hChg').textContent = Math.round(b.charge);
+    $('chgFill').style.width = b.charge + '%';
+    $('chgTile').classList.toggle('empty', b.charge < 12);
+    $('blade').classList.toggle('on', b.blade);
+    $('blade').classList.toggle('flat', b.charge < 5);
+    $('bladeSub').textContent = b.blade ? 'riding hot' : b.charge < 5 ? 'recharging' : isTouch ? 'tap to deploy' : 'space';
+  }
+}
+
+// ---- input -------------------------------------------------------------------------------
 function turn(d) {
-  if (mode !== 'play' && mode !== 'count') return;
-  const last = queue.length ? queue[queue.length - 1] : cycles[0].dir;
-  if (d === last || d === BACK[last] || queue.length >= 2) return;
-  queue.push(d);
+  const b = bikes.get(me);
+  if (!riding || !b || d === b.d || d === BACK[b.d]) return;
+  send({t: 'turn', d});
 }
+function blade(on) { if (!riding) return; bladeOn = on; send({t: 'blade', on}); $('blade').classList.toggle('on', on); }
 const KEYS = {ArrowUp: 'U', ArrowDown: 'D', ArrowLeft: 'L', ArrowRight: 'R', w: 'U', s: 'D', a: 'L', d: 'R', W: 'U', S: 'D', A: 'L', D: 'R'};
 addEventListener('keydown', e => {
+  if (e.target === $('nameIn') && e.key !== 'Enter') return;
   if (KEYS[e.key]) { e.preventDefault(); turn(KEYS[e.key]); return; }
-  if (e.key === 'Escape' || e.key === 'p') { mode === 'paused' ? resume() : pause(); return; }
-  if (e.key === ' ' || e.key === 'Enter') {
-    e.preventDefault();
-    if (mode === 'paused') resume(); else if (mode === 'count') countT = Math.min(countT, 0.01);
-    else if (!$('overlay').hidden) startPlay();
-  }
+  if (e.key === ' ') { e.preventDefault(); if (riding) blade(!bladeOn); return; }
+  if (e.key === 'Enter' && !$('overlay').hidden && !$('startBtn').disabled) join();
 });
-for (const b of pad.querySelectorAll('button')) {
-  b.addEventListener('pointerdown', e => { e.preventDefault(); turn(b.dataset.d); b.classList.add('on'); });
-  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => b.classList.remove('on'));
+for (const btn of $('pad').querySelectorAll('button')) {
+  btn.addEventListener('pointerdown', e => { e.preventDefault(); turn(btn.dataset.d); btn.classList.add('on'); });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) btn.addEventListener(ev, () => btn.classList.remove('on'));
 }
+$('blade').addEventListener('pointerdown', e => { e.preventDefault(); blade(!bladeOn); });
 let swipe = null;
-const canvas = $('cv');
-canvas.addEventListener('pointerdown', e => {
-  if (mode === 'count') { countT = Math.min(countT, 0.01); return; }
-  const r = canvas.getBoundingClientRect();
-  if (mode === 'play' && isTouch && e.clientY - r.top < r.height / 2) { pause(); return; }   // Snaked's rule: tap the top half to pause
-  swipe = {x: e.clientX, y: e.clientY};
-});
-canvas.addEventListener('pointermove', e => {
+const cv = $('cv');
+cv.addEventListener('pointerdown', e => { swipe = {x: e.clientX, y: e.clientY}; });
+cv.addEventListener('pointermove', e => {
   if (!swipe) return;
   const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
   if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
@@ -257,81 +258,80 @@ canvas.addEventListener('pointermove', e => {
   swipe = {x: e.clientX, y: e.clientY};
 });
 addEventListener('pointerup', () => { swipe = null; });
-$('pause').addEventListener('pointerdown', resume);
-$('startBtn').addEventListener('click', startPlay);
-document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
-$('startSub').textContent = isTouch ? 'tap to start' : 'click to start';
-$('how').textContent = isTouch ? 'steer with the arrow buttons, or swipe' : 'arrow keys or WASD steer · Esc pauses';
-$('pHint').textContent = isTouch ? 'tap anywhere to carry on' : 'press Esc or click to carry on';
-
-// ---- drawing ----------------------------------------------------------------------------
-const ctx = canvas.getContext('2d');
-let scale = 1, dpr = 1;
-const PAD_H = 3 * 44 + 2 * 4;
-function fit() {   // Snaked's: as big as the screen allows, stopping above the arrow pad on phones
-  const top = parseFloat(getComputedStyle($('wrap')).paddingTop) || 76;
-  const floor = innerHeight - 12 - $('sab').offsetHeight - (isTouch ? PAD_H + 6 : 0);
-  const aw = Math.min(innerWidth - (isTouch ? 0 : 16), 480), ah = floor - top;
-  scale = Math.max(0.3, Math.min(aw / W, ah / H));
-  if (isTouch) pad.style.gridTemplateRows = 'repeat(3,' + (PAD_H - 8 + Math.max(0, ah - H * scale)) / 3 + 'px)';
-  dpr = Math.min(2, devicePixelRatio || 1);
-  canvas.style.width = W * scale + 'px'; canvas.style.height = H * scale + 'px';
-  canvas.width = Math.round(W * scale * dpr); canvas.height = Math.round(H * scale * dpr);
+function join() {
+  const n = $('nameIn').value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  $('nameIn').value = n;
+  send({t: 'join', name: n});
 }
-const mix = (a, b, f) => a.map((v, k) => Math.round(v + (b[k] - v) * f));
-const rgb = c => 'rgb(' + c.join(',') + ')';
+$('startBtn').addEventListener('click', join);
+$('startSub').textContent = 'connecting…';
+$('how').textContent = isTouch ? 'arrows steer · BLADE lays the wall' : 'arrow keys or WASD steer · space deploys the blade';
+$('hint').textContent = isTouch ? '' : 'space deploys the blade';
+
+// ---- drawing ------------------------------------------------------------------------------
+const ctx = cv.getContext('2d');
+let dpr = 1, cw = 0, ch = 0;
+function fit() {
+  dpr = Math.min(2, devicePixelRatio || 1); cw = innerWidth; ch = innerHeight;
+  cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
+  cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+}
+addEventListener('resize', fit);
 function draw() {
-  ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
-  ctx.fillStyle = '#070a10'; ctx.fillRect(0, 0, W, H);   // carved tunnel floor: darker than anything else
-  // rock: every uncarved cell is a solid tile with a faint top highlight
-  for (let i = 0; i < grid.length; i++) {
-    const x = cx(i) * CELL, y = cy(i) * CELL;
-    if (!grid[i]) {
-      ctx.fillStyle = '#1b2638'; ctx.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
-      ctx.fillStyle = 'rgba(255,255,255,.05)'; ctx.fillRect(x + 2, y + 1.5, CELL - 4, 2);
-    } else {
-      ctx.fillStyle = rgb(mix(cycles[grid[i] - 1].col, [7, 10, 16], 0.86)); ctx.fillRect(x, y, CELL, CELL);
-    }
+  const b = bikes.get(me), t = Math.min(1.4, (performance.now() - tickAt) / TICK_MS);
+  // following your bike: zoomed in. Watching from the menu: the whole arena.
+  const cell = riding && b ? Math.max(14, Math.min(34, Math.min(cw / 18, ch / 26)))
+    : Math.min(cw * 0.94 / W, ch * 0.82 / H);
+  const at = k => [k.px + (k.x - k.px) * t, k.py + (k.y - k.py) * t];
+  let camX = W / 2, camY = H / 2;
+  if (riding && b) { const [bx, by] = at(b); camX = bx + 0.5; camY = by + 0.5; }
+  // on a phone the controls sit at the foot of the screen, so your bike rides a little above centre
+  const ox = cw / 2 - camX * cell, oy = (riding && b && isTouch ? ch * 0.40 : ch / 2) - camY * cell;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#070a10'; ctx.fillRect(0, 0, cw, ch);
+  ctx.save(); ctx.translate(ox, oy);
+  ctx.fillStyle = '#0d1420'; ctx.fillRect(0, 0, W * cell, H * cell);
+  ctx.strokeStyle = 'rgba(120,150,200,.07)'; ctx.lineWidth = 1; ctx.beginPath();
+  for (let x = 0; x <= W; x++) { ctx.moveTo(x * cell + .5, 0); ctx.lineTo(x * cell + .5, H * cell); }
+  for (let y = 0; y <= H; y++) { ctx.moveTo(0, y * cell + .5); ctx.lineTo(W * cell, y * cell + .5); }
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,95,110,.5)'; ctx.lineWidth = 3;
+  ctx.shadowColor = 'rgba(255,95,110,.5)'; ctx.shadowBlur = 14;
+  ctx.strokeRect(0, 0, W * cell, H * cell); ctx.shadowBlur = 0;
+  // barricades: solid while they hold, fading out over their last two seconds
+  for (const [c, w] of walls) {
+    const age = tick - w.born + t, a = age > WALL_TICKS - 20 ? Math.max(0, (WALL_TICKS - age) / 20) : 1;
+    const x = (c % W) * cell, y = ((c / W) | 0) * cell, col = colOf(w.o);
+    ctx.fillStyle = rgb(col, 0.9 * a);
+    ctx.fillRect(x + 1, y + 1, cell - 2, cell - 2);
+    ctx.fillStyle = rgb([255, 255, 255], 0.14 * a); ctx.fillRect(x + 2, y + 2, cell - 4, 2);
   }
-  const t = Math.min(1, acc / interval());
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  for (const c of cycles) {
-    const live = c.alive && (mode === 'play' || mode === 'attract');
-    const pts = c.path.map(i => [(cx(i) + 0.5) * CELL, (cy(i) + 0.5) * CELL]);
-    if (live && pts.length > 1) {   // the head glides into its newest cell
-      const a = pts[pts.length - 2], b = pts[pts.length - 1];
-      pts[pts.length - 1] = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-    }
-    const col = c.alive ? c.col : mix(c.col, [13, 20, 32], 0.55);
+  for (const k of bikes.values()) {
+    const [bx, by] = at(k), col = colOf(k.id), x = (bx + 0.5) * cell, y = (by + 0.5) * cell;
     ctx.save();
-    ctx.strokeStyle = rgb(col); ctx.lineWidth = 4; ctx.shadowColor = rgb(col); ctx.shadowBlur = c.alive ? 10 : 0;
-    ctx.beginPath(); pts.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
-    const [hx, hy] = pts[pts.length - 1];
-    if (c.alive) { ctx.shadowBlur = 18; ctx.fillStyle = rgb(c.col); ctx.beginPath(); ctx.roundRect(hx - 7, hy - 7, 14, 14, 4); ctx.fill(); }
+    ctx.shadowColor = rgb(col); ctx.shadowBlur = k.blade ? 24 : 12; ctx.fillStyle = rgb(col);
+    ctx.beginPath(); ctx.roundRect(x - cell * 0.4, y - cell * 0.4, cell * 0.8, cell * 0.8, cell * 0.25); ctx.fill();
     ctx.restore();
-    if (!c.bot && c.alive) { ctx.fillStyle = '#05121f'; ctx.beginPath(); ctx.arc(hx, hy, 2.6, 0, Math.PI * 2); ctx.fill(); }   // a dot marks you
+    if (k.id === me) { ctx.fillStyle = '#05121f'; ctx.beginPath(); ctx.arc(x, y, cell * 0.13, 0, Math.PI * 2); ctx.fill(); }
+    else if (cell > 16) {
+      const nm = names.get(k.id);
+      if (nm) { ctx.fillStyle = rgb(col, .75); ctx.font = '700 10px -apple-system,Segoe UI,Roboto,sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText(nm.n, x, y - cell * 0.6); }
+    }
   }
-  for (const p of parts) { ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2.5)); ctx.fillStyle = p.col; ctx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3); }
+  for (const p of parts) { ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2.5)); ctx.fillStyle = rgb(p.col);
+    ctx.fillRect((p.x + 0.5) * cell - 2, (p.y + 0.5) * cell - 2, 3, 3); }
   ctx.globalAlpha = 1;
-  if (mode === 'count') {
-    ctx.fillStyle = 'rgba(9,12,18,.45)'; ctx.fillRect(0, 0, W, H);
-    ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = '800 86px -apple-system,Segoe UI,Roboto,sans-serif';
-    ctx.shadowColor = 'rgba(95,176,255,.6)'; ctx.shadowBlur = 32; ctx.fillStyle = '#eaf2ff';
-    ctx.fillText(Math.max(1, Math.ceil(countT)), W / 2, H / 2);
-    ctx.shadowBlur = 0; ctx.fillStyle = '#9fadc1'; ctx.font = '600 13px -apple-system,Segoe UI,Roboto,sans-serif';
-    ctx.fillText('you are the cyan one with the dot', W / 2, H / 2 + 70);
-    ctx.restore();
-  }
+  ctx.restore();
 }
-
 let last = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000 || 0); last = now;
-  step(dt); draw(); requestAnimationFrame(frame);
+  for (const p of parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.94; p.vy *= 0.94; p.life -= dt; }
+  parts = parts.filter(p => p.life > 0);
+  draw(); requestAnimationFrame(frame);
 }
-addEventListener('resize', fit);
-fit(); newRound(false); draw(); requestAnimationFrame(frame);
+fit(); connect(); requestAnimationFrame(frame);
 </script>
 </body>
 </html>
