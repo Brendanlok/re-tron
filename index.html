@@ -116,7 +116,7 @@
   <p id="msg">Everyone rides in the same arena, and you can join any time. Your bike leaves nothing behind &mdash; <b>until you switch on the blade.</b> Then it lays a wall that takes out anyone who rides into it, you included. The blade runs on charge, so pick your moment.</p>
   <div id="stats" hidden></div>
   <div id="nameRow"><input id="nameIn" maxlength="8" placeholder="your name" autocomplete="off" spellcheck="false" autocapitalize="characters" autocorrect="off" aria-label="Your name, up to 8 letters or numbers"></div>
-  <button id="startBtn" disabled><span class="lbl" id="startLbl">Ride</span><span class="sub" id="startSub">connecting…</span></button>
+  <button id="startBtn" disabled><span class="lbl" id="startLbl">Start</span><span class="sub" id="startSub">connecting…</span></button>
   <p id="live"></p>
   <p class="how" id="how"></p>
 </div>
@@ -137,7 +137,7 @@ let myStart = 0, myKos = 0, riding = false, parts = [], bladeOn = false, retry =
 // ---- server ------------------------------------------------------------------------------
 function connect() {
   ws = new WebSocket(SERVER);
-  ws.onopen = () => { $('startSub').textContent = isTouch ? 'tap to join' : 'click to join'; $('startBtn').disabled = false; };
+  ws.onopen = () => { $('startSub').textContent = isTouch ? 'tap to start' : 'click to start'; $('startBtn').disabled = false; };
   ws.onmessage = e => onMsg(JSON.parse(e.data));
   ws.onclose = () => {
     $('startBtn').disabled = true; $('startSub').textContent = 'reconnecting…';
@@ -205,7 +205,7 @@ function showResult(s, reason, killer) {
   $('msg').textContent = reason === 'lost' ? 'The arena dropped out. It reconnects on its own.'
     : 'The arena keeps going without you. Jump back in.';
   if (s) { $('stats').hidden = false; $('stats').innerHTML = 'Score <b>' + s.score + '</b> &middot; Alive <b>' + s.secs.toFixed(1) + 's</b> &middot; <b>' + s.kos + '</b> KO' + (s.kos === 1 ? '' : 's'); }
-  $('startLbl').textContent = 'Ride again';
+  $('startLbl').textContent = 'Start again';
   $('overlay').hidden = false;
   $('hud').hidden = $('board').hidden = $('blade').hidden = $('pad').hidden = $('hint').hidden = true;
 }
