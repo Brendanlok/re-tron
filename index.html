@@ -146,13 +146,16 @@ const SERVER = /github\.io$/.test(location.hostname) ? 'wss://re-tron.chanlokk97
 const $ = id => document.getElementById(id);
 const isTouch = matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints > 0 || /[?&]touch/.test(location.search);
 const DIRN = ['U', 'D', 'L', 'R'], BACK = {U: 'D', D: 'U', L: 'R', R: 'L'};
+// The film's two sides: you ride cyan like a program, and the arena fills with Clu's ambers and oranges.
+// The cooler hues further down only turn up once there are more bikes than the warm ones can tell apart.
 const MINE = [87, 211, 255];   // you are always cyan
-const PALETTE = [[185, 139, 255], [255, 122, 192], [255, 157, 92], [255, 210, 95], [120, 230, 160], [255, 95, 110], [150, 170, 255], [120, 200, 255]];
+const PALETTE = [[255, 158, 58], [255, 108, 40], [255, 206, 92], [255, 84, 64], [150, 200, 255], [190, 140, 255], [120, 235, 200], [110, 240, 255]];
 const rgb = (c, a) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (a === undefined ? 1 : a) + ')';
 
 let W = 40, H = 60, WALL_TICKS = 80, TICK_MS = 100;
 let ws = null, me = 0, tick = 0, tickAt = 0, bikes = new Map(), walls = new Map(), names = new Map();
 let myStart = 0, myKos = 0, riding = false, parts = [], bladeOn = false, myName = '';
+let waves = [], shake = 0;   // the rings a crash throws off, and the kick your own crash gives the camera
 
 // ---- server ------------------------------------------------------------------------------
 // The socket is open only while riding. The arena ticks ten times a second for as long as anyone
@@ -239,14 +242,30 @@ function setBike(a) {
 }
 function onOut([victim, killer, reason, score, ticksAlive, kos]) {
   const b = bikes.get(victim) || {x: 0, y: 0};
-  if (reason !== 'left') burst(b.x, b.y, colOf(victim));
+  if (reason !== 'left') {
+    derez(b.x, b.y, colOf(victim), b.d);
+    if (victim === me) shake = 1;                           // only your own crash hits the camera
+  }
   if (killer === me) myKos++;
   if (victim === me) { riding = false; showResult({score, secs: ticksAlive / 10, kos}, reason, killer); }
 }
-function burst(x, y, col) {
-  for (let k = 0; k < 24; k++) {
-    const a = Math.random() * Math.PI * 2, v = 2 + Math.random() * 8;
-    parts.push({x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.5 + Math.random() * 0.5, col});
+// A program does not explode, it derezzes: the machine comes apart into a cloud of cubes that scatter,
+// tumble and go out, with a flash and a ring of light going off the spot. Tron's one unmistakable effect.
+function derez(x, y, col, dir) {
+  const a0 = ANG[dir] === undefined ? 0 : ANG[dir];   // ANG, not the server's DIRS: the page has no DIRS
+  waves.push({x, y, t: 0, col});
+  for (let k = 0; k < 38; k++) {
+    const a = Math.random() * Math.PI * 2, v = 1.5 + Math.random() * 9, life = 0.4 + Math.random() * 0.8;
+    parts.push({
+      x, y,
+      // the wreck keeps going the way it was heading, so a crash reads as a crash and not a firework
+      vx: Math.cos(a) * v + (dir ? Math.cos(a0) * 3.5 : 0),
+      vy: Math.sin(a) * v + (dir ? Math.sin(a0) * 3.5 : 0),
+      life, max: life,
+      sz: 0.1 + Math.random() * 0.26,                       // in cells, so shards scale with the zoom
+      rot: Math.random() * Math.PI, spin: (Math.random() - 0.5) * 10,
+      hot: Math.random() < 0.3,                             // a few shards burn white before they go
+      col});
   }
 }
 const colOf = id => id === me ? MINE : PALETTE[id % PALETTE.length];
@@ -338,44 +357,47 @@ function fit() {
 addEventListener('resize', fit);
 const ANG = {U: -Math.PI / 2, D: Math.PI / 2, L: Math.PI, R: 0};
 const NB = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const WAVE_S = 0.55;   // how long a crash ring takes to race out and die
 
 // A light cycle, not a square. The hull tapers to a white-hot nose and dims towards the tail, so which
 // way a bike is heading reads instantly — from your own bike at full zoom down to a stranger's across
 // the arena on the menu. Wheels only appear when there are pixels enough for them to read as wheels.
 function cycle(x, y, ang, col, cell, blade, isMe) {
-  // A light cycle seen from above: long and narrow, with the two wheels in line front-to-back the way
-  // they actually are on a bike, handlebars across the front, and the rider between them. A headlight
-  // burns white at the nose, so which way it is pointing reads even when it is only a few pixels long.
-  // It never shrinks below legible: zoomed out to the whole arena a cell is tiny, and a bike drawn to
-  // scale there would be an unreadable dot.
-  const s = Math.max(cell, 13), hl = s * 0.85, hw = s * 0.2, detail = cell > 15;
+  // A Tron Legacy light cycle, seen from above. The machine itself is black; what you see is the light
+  // on it — two long wheel strips in line, the front one longest and burning white, with thin piping
+  // down the flanks. That inversion is the whole look: dark object, bright edges, heavy bloom. The
+  // lights are drawn at every size, the black body and the rider only when there are pixels for them,
+  // because zoomed out to the whole arena a cell is a few pixels and a black shape would just vanish.
+  const s = Math.max(cell, 13), hl = s * 0.9, hw = s * 0.19, detail = cell > 15;
   ctx.save();
   ctx.translate(x, y); ctx.rotate(ang);
-  const g = ctx.createLinearGradient(-hl, 0, hl, 0);
-  g.addColorStop(0, rgb(col, .4)); g.addColorStop(.65, rgb(col, .95)); g.addColorStop(1, '#ffffff');
-  ctx.fillStyle = g;
-  ctx.shadowColor = rgb(col); ctx.shadowBlur = blade ? s * 0.9 : s * 0.45;
-  ctx.beginPath();                                          // the hull: a teardrop, nose forward
-  ctx.moveTo(hl, 0);
-  ctx.quadraticCurveTo(hl * 0.7, -hw * 0.9, hl * 0.2, -hw);
-  ctx.lineTo(-hl * 0.5, -hw * 0.9);
-  ctx.quadraticCurveTo(-hl, -hw * 0.55, -hl, 0);
-  ctx.quadraticCurveTo(-hl, hw * 0.55, -hl * 0.5, hw * 0.9);
-  ctx.lineTo(hl * 0.2, hw);
-  ctx.quadraticCurveTo(hl * 0.7, hw * 0.9, hl, 0);
-  ctx.closePath(); ctx.fill();
+
+  if (detail) {                                             // the machine: dark, but a shade off the floor
+    ctx.fillStyle = 'rgba(19,28,42,.96)';                   // so the silhouette reads instead of vanishing
+    ctx.beginPath(); ctx.roundRect(-hl * 0.84, -hw, hl * 1.68, hw * 2, hw * 0.7); ctx.fill();
+    ctx.strokeStyle = 'rgba(2,5,9,.9)'; ctx.lineWidth = Math.max(1, s * 0.03); ctx.stroke();
+  }
+  const wheel = (cx, len, wid, hot) => {                    // a wheel, edge on: a bar of light
+    ctx.fillStyle = hot ? '#ffffff' : rgb(col, .95);
+    ctx.shadowColor = hot ? '#ffffff' : rgb(col); ctx.shadowBlur = blade ? s * 0.85 : s * 0.5;
+    ctx.beginPath(); ctx.roundRect(cx - len / 2, -wid / 2, len, wid, wid / 2); ctx.fill();
+  };
+  wheel(-hl * 0.55, hl * 0.5, hw * 0.8, false);             // rear
+  wheel(hl * 0.55, hl * 0.6, hw * 0.88, true);              // front: longer and white, so heading reads
+  if (detail) {                                             // the light rails down the flanks, between the wheels
+    ctx.fillStyle = rgb(col, .9); ctx.shadowColor = rgb(col); ctx.shadowBlur = s * 0.4;
+    ctx.beginPath(); ctx.roundRect(-hl * 0.32, -hw * 0.88, hl * 0.72, s * 0.035, s * 0.02); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(-hl * 0.32, hw * 0.88 - s * 0.035, hl * 0.72, s * 0.035, s * 0.02); ctx.fill();
+  }
   ctx.shadowBlur = 0;
-  if (detail) {
-    ctx.fillStyle = 'rgba(5,9,15,.5)';                      // wheels: thin, in line with travel
-    ctx.beginPath(); ctx.ellipse(hl * 0.5, 0, s * 0.16, hw * 0.4, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(-hl * 0.52, 0, s * 0.17, hw * 0.44, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(5,9,15,.42)';                     // handlebars
-    ctx.beginPath(); ctx.roundRect(hl * 0.16, -hw * 1.1, s * 0.06, hw * 2.2, s * 0.03); ctx.fill();
-    // the rider sits ON the machine, so they read as a highlight rather than another dark hole
-    ctx.fillStyle = isMe ? 'rgba(232,245,255,.8)' : rgb([255, 255, 255], .34);
-    ctx.beginPath(); ctx.ellipse(-hl * 0.06, 0, s * 0.13, hw * 0.62, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(5,9,15,.3)';                      // spine, to break up the hull
-    ctx.beginPath(); ctx.roundRect(-hl * 0.5, -s * 0.014, hl, s * 0.028, s * 0.014); ctx.fill();
+
+  if (detail) {                                             // the rider, lying forward over the machine
+    ctx.fillStyle = 'rgba(9,15,24,.96)';
+    ctx.beginPath(); ctx.ellipse(-hl * 0.12, 0, s * 0.19, hw * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = isMe ? '#dff4ff' : rgb(col, .8);        // helmet
+    ctx.shadowColor = isMe ? '#ffffff' : rgb(col); ctx.shadowBlur = s * 0.3;
+    ctx.beginPath(); ctx.ellipse(-hl * 0.02, 0, s * 0.07, hw * 0.36, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
   }
   ctx.restore();
 }
@@ -389,7 +411,9 @@ function draw() {
   let camX = W / 2, camY = H / 2;
   if (riding && b) { const [bx, by] = at(b); camX = bx + 0.5; camY = by + 0.5; }
   // on a phone the controls sit at the foot of the screen, so your bike rides a little above centre
-  const ox = cw / 2 - camX * cell, oy = (riding && b && isTouch ? ch * 0.40 : ch / 2) - camY * cell;
+  const sk = shake * shake * cell * 0.5;                    // a short kick, gone almost as soon as it lands
+  const ox = cw / 2 - camX * cell + (Math.random() - 0.5) * sk,
+        oy = (riding && b && isTouch ? ch * 0.40 : ch / 2) - camY * cell + (Math.random() - 0.5) * sk;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = '#070a10'; ctx.fillRect(0, 0, cw, ch);
   ctx.save(); ctx.translate(ox, oy);
@@ -457,16 +481,45 @@ function draw() {
         ctx.fillText(nm.n, x, y - cell * 0.75); }
     }
   }
-  for (const p of parts) { ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2.5)); ctx.fillStyle = rgb(p.col);
-    ctx.beginPath(); ctx.arc((p.x + 0.5) * cell, (p.y + 0.5) * cell, Math.max(1, cell * 0.07), 0, Math.PI * 2); ctx.fill(); }
-  ctx.globalAlpha = 1;
+  // the ring a crash throws off, racing out and thinning as it goes
+  for (const w of waves) {
+    const k = w.t / WAVE_S, r = cell * (0.4 + k * 5.5);
+    ctx.globalAlpha = (1 - k) * (1 - k);
+    ctx.strokeStyle = rgb(w.col); ctx.shadowColor = rgb(w.col); ctx.shadowBlur = cell * 0.9;
+    ctx.lineWidth = Math.max(1, cell * 0.16 * (1 - k));
+    ctx.beginPath(); ctx.arc((w.x + 0.5) * cell, (w.y + 0.5) * cell, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur = 0;
+    if (k < 0.3) {                                          // the white flash at the moment it goes
+      ctx.globalAlpha = (1 - k / 0.3) * 0.8;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc((w.x + 0.5) * cell, (w.y + 0.5) * cell, cell * (0.5 + k * 2), 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  // the shards: cubes of the machine, tumbling as they go out
+  for (const p of parts) {
+    const k = p.life / p.max, sz = Math.max(1, cell * p.sz);
+    ctx.globalAlpha = Math.min(1, k * 1.6);
+    ctx.save();
+    ctx.translate((p.x + 0.5) * cell, (p.y + 0.5) * cell); ctx.rotate(p.rot);
+    ctx.fillStyle = p.hot ? '#ffffff' : rgb(p.col);
+    ctx.shadowColor = p.hot ? '#ffffff' : rgb(p.col); ctx.shadowBlur = sz * 1.6;
+    ctx.fillRect(-sz / 2, -sz / 2, sz, sz);
+    ctx.restore();
+  }
+  ctx.shadowBlur = 0; ctx.globalAlpha = 1;
   ctx.restore();
 }
 let last = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000 || 0); last = now;
-  for (const p of parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.94; p.vy *= 0.94; p.life -= dt; }
+  for (const p of parts) {
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.94; p.vy *= 0.94;
+    p.rot += p.spin * dt; p.life -= dt;
+  }
   parts = parts.filter(p => p.life > 0);
+  for (const w of waves) w.t += dt;
+  waves = waves.filter(w => w.t < WAVE_S);
+  shake = Math.max(0, shake - dt * 3.2);
   draw(); requestAnimationFrame(frame);
 }
 fit(); liveCount(); loadTop(); requestAnimationFrame(frame);
