@@ -26,6 +26,14 @@
   #hud .st-chg .bar{width:52px;height:4px;border-radius:2px;background:rgba(255,210,95,.2);margin-top:5px;overflow:hidden;}
   #hud .st-chg .bar span{display:block;height:100%;background:#ffd25f;box-shadow:0 0 8px #ffd25f;}
   #hud .st-chg.empty b,#hud .st-chg.empty .bar span{color:#ff9d8a;background:#ff9d8a;}
+  /* the mute button rides in the score row, like Snaked's - small, so the three tiles stay the point */
+  #hud #sndRun{pointer-events:auto;align-self:center;width:38px;height:38px;padding:0;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;color:#8296b0;background:rgba(9,13,20,.55);
+    border:1px solid rgba(120,150,200,.2);border-radius:13px;-webkit-tap-highlight-color:transparent;
+    -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
+  #hud #sndRun svg{width:20px;height:20px;}
+  #sndRun.off{color:#5c6a80;}
+  .snd-on .x,.snd-off .w{display:none;}
   /* live top five, in the corner: Snaked's chasing panel */
   #board{position:fixed;z-index:28;top:calc(78px + env(safe-area-inset-top,0px));right:8px;box-sizing:border-box;
     width:124px;padding:8px 9px 6px;border-radius:12px;background:rgba(10,15,24,.72);border:1px solid rgba(120,150,200,.16);
@@ -108,10 +116,12 @@
   #blade.flat{opacity:.45;}
   #hint{position:fixed;left:0;right:0;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:19;text-align:center;
     color:#5c6a80;font-size:11px;letter-spacing:.04em;pointer-events:none;}
-  /* telling us something broke: a quiet line under the menu, opening an in-page box (no native prompts) */
-  #sayBtn{margin-top:10px;padding:6px 16px;border:1px solid rgba(120,150,200,.24);border-radius:999px;cursor:pointer;
+  /* the quiet row under the menu: the sound setting, and telling us something broke (in-page, no native prompts) */
+  #foot{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+  #foot button{padding:6px 16px;border:1px solid rgba(120,150,200,.24);border-radius:999px;cursor:pointer;
     background:rgba(70,88,122,.2);color:#8296b0;font-family:inherit;font-size:11px;font-weight:700;letter-spacing:.08em;}
-  #sayBtn:active{transform:scale(.96);}
+  #foot button:active{transform:scale(.96);}
+  #sndBtn.on{border-color:rgba(87,211,255,.4);color:#57d3ff;background:rgba(87,211,255,.12);}
   #sayBox{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:20px;
     background:rgba(5,8,13,.72);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);}
   #sayBox .card{width:min(330px,100%);box-sizing:border-box;padding:18px 18px 14px;border-radius:16px;text-align:center;
@@ -160,6 +170,7 @@
   <div class="stat st-time"><b id="hTime">0.0</b><i>alive</i></div>
   <div class="stat st-ko"><b id="hKo">0</b><i>knockouts</i></div>
   <div class="stat st-chg" id="chgTile"><b id="hChg">100</b><i>charge</i><div class="bar"><span id="chgFill"></span></div></div>
+  <button id="sndRun" type="button" aria-label="Sound on"><svg viewBox="0 0 24 24"><path d="M3 9h4l5-4v14l-5-4H3z" fill="currentColor"/><path class="w" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path class="x" d="M16 9l6 6M22 9l-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
 </div>
 <div id="board" hidden></div>
 <div id="pad" hidden>
@@ -183,7 +194,10 @@
     <div class="rows" id="lbRows"></div>
   </div>
   <p class="how" id="how"></p>
-  <button id="sayBtn" type="button">Something broken? Tell us</button>
+  <div id="foot">
+    <button id="sndBtn" type="button" aria-pressed="true">Sound: on</button>
+    <button id="sayBtn" type="button">Something broken? Tell us</button>
+  </div>
 </div>
 <div id="sayBox" hidden>
   <div class="card">
@@ -308,8 +322,9 @@ function onOut([victim, killer, reason, score, ticksAlive, kos]) {
     derez(b.x, b.y, colOf(victim), b.d);
     if (victim === me) shake = 1;                           // only your own crash hits the camera
   }
-  if (killer === me) myKos++;
+  if (killer === me) { myKos++; SFX.ko(); }
   if (victim === me) { riding = false; showResult({score, secs: ticksAlive / 10, kos}, reason, killer); }
+  else if (reason !== 'left') SFX.theirs();
 }
 // A program does not explode, it derezzes: the machine comes apart into a cloud of cubes that scatter,
 // tumble and go out, with a flash and a ring of light going off the spot. Tron's one unmistakable effect.
@@ -337,6 +352,8 @@ function showResult(s, reason, killer) {
   const who = killer && names.get(killer) ? names.get(killer).n : 'someone';
   const why = {wall: 'you hit ' + who + '’s blade', self: 'you hit your own blade', edge: 'you hit the arena wall',
     head: 'head-on crash', lost: 'connection lost'}[reason] || 'you are out';
+  humWas = false; humSet(false);                 // off the bike, so nothing is laying a wall
+  if (reason !== 'lost') SFX.mine();
   $('badge').textContent = why;
   $('title').textContent = reason === 'lost' ? 'DISCONNECTED' : 'KNOCKED OUT';
   $('msg').textContent = reason === 'lost' ? 'The arena dropped out. It reconnects on its own.'
@@ -364,14 +381,81 @@ function paint() {
     $('chgTile').classList.toggle('empty', b.charge < 12);
     $('blade').classList.toggle('on', b.blade);
     $('blade').classList.toggle('flat', b.charge < 5);
+    if (b.blade !== humWas) {
+      humWas = b.blade; humSet(b.blade);
+      if (b.blade) SFX.bladeUp(); else if (b.charge < 5) SFX.dry(); else SFX.bladeDown();
+    }
     $('bladeSub').textContent = b.blade ? 'riding hot' : b.charge < 5 ? 'recharging' : isTouch ? 'tap to deploy' : 'space';
   }
 }
+
+// ---- sound: short synthesized blips, no audio files (Snaked's approach) ---------------------
+// On by default and remembered. Browsers only allow audio after a tap or a key press, so the engine
+// starts on the first one. The blade is the game, so it gets a held hum rather than a one-shot.
+let actx = null, soundOn = true, hum = null, humWas = false;
+try { soundOn = localStorage.getItem('retron-sound') !== '0'; } catch (e) {}
+function unlockAudio() {
+  const A = window.AudioContext || window.webkitAudioContext;
+  if (!actx && A) actx = new A();
+  if (actx && actx.state === 'suspended') actx.resume();
+}
+addEventListener('pointerdown', unlockAudio, true); addEventListener('keydown', unlockAudio, true);
+function tone(freq, dur, type, vol, slideTo, delay) {
+  if (!soundOn || !actx) return;
+  const t0 = actx.currentTime + (delay || 0), o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t0);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+  g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(actx.destination); o.start(t0); o.stop(t0 + dur + 0.02);
+}
+// the blade's hum: one oscillator held for as long as the wall is being laid
+function humSet(on) {
+  if (!actx) return;
+  if (on && soundOn && !hum) {
+    const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(72, t);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.045, t + 0.09);
+    o.connect(g); g.connect(actx.destination); o.start(t);
+    hum = {o, g};
+  } else if ((!on || !soundOn) && hum) {
+    const t = actx.currentTime, h = hum; hum = null;
+    h.g.gain.cancelScheduledValues(t); h.g.gain.setValueAtTime(h.g.gain.value, t);
+    h.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12); h.o.stop(t + 0.16);
+  }
+}
+const SFX = {
+  start: () => { tone(330, 0.09, 'square', 0.05); tone(660, 0.13, 'square', 0.05, 0, 0.08); },
+  bladeUp: () => tone(170, 0.13, 'sawtooth', 0.07, 540),
+  bladeDown: () => tone(540, 0.1, 'sawtooth', 0.05, 180),
+  dry: () => tone(210, 0.24, 'square', 0.06, 70),                 // the charge ran out under you
+  ko: () => { tone(880, 0.07, 'square', 0.07); tone(1320, 0.15, 'square', 0.06, 0, 0.07); },
+  mine: () => { tone(300, 0.5, 'sawtooth', 0.1, 40); tone(90, 0.42, 'triangle', 0.11, 40, 0.02); },
+  theirs: () => tone(230, 0.17, 'sawtooth', 0.035, 75),           // someone else derezzing, further off
+  turn: () => tone(700, 0.03, 'square', 0.02),                    // so the arrow pad feels like it answered
+};
+// the menu setting and the in-run button are two views of the same remembered value
+function showSound() {
+  const t = soundOn ? 'on' : 'off';
+  $('sndBtn').textContent = 'Sound: ' + t;
+  $('sndBtn').classList.toggle('on', soundOn);
+  $('sndBtn').setAttribute('aria-pressed', soundOn ? 'true' : 'false');
+  $('sndRun').classList.toggle('off', !soundOn);
+  $('sndRun').setAttribute('aria-label', 'Sound ' + t);
+  for (const el of [$('sndBtn'), $('sndRun')]) { el.classList.toggle('snd-on', soundOn); el.classList.toggle('snd-off', !soundOn); }
+}
+function setSound(on) {
+  soundOn = on; showSound(); humSet(humWas);
+  try { localStorage.setItem('retron-sound', on ? '1' : '0'); } catch (e) {}
+}
+$('sndBtn').addEventListener('click', () => { setSound(!soundOn); $('sndBtn').blur(); });
+$('sndRun').addEventListener('click', e => { e.preventDefault(); setSound(!soundOn); $('sndRun').blur(); });
+showSound();
 
 // ---- input -------------------------------------------------------------------------------
 function turn(d) {
   const b = bikes.get(me);
   if (!riding || !b || d === b.d || d === BACK[b.d]) return;
+  SFX.turn();
   send({t: 'turn', d});
 }
 function blade(on) { if (!riding) return; bladeOn = on; send({t: 'blade', on}); $('blade').classList.toggle('on', on); }
@@ -410,6 +494,7 @@ function join() {
   const n = $('nameIn').value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
   $('nameIn').value = n; myName = n;
   $('startBtn').disabled = true; $('startSub').textContent = 'connecting…';
+  unlockAudio(); SFX.start();
   if (ws) send({t: 'join', name: n}); else connect();
 }
 $('startBtn').addEventListener('click', join);
