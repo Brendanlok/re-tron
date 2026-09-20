@@ -11,6 +11,7 @@ const MAX_HUMANS = 12;
 const DIRS = {U: [0, -1], D: [0, 1], L: [-1, 0], R: [1, 0]}, BACK = {U: 'D', D: 'U', L: 'R', R: 'L'};
 const DI = {U: 0, D: 1, L: 2, R: 3};
 const BOT_NAMES = ['VOLT', 'NEON', 'ARC', 'FLUX', 'ION', 'GRID', 'PULSE', 'ZAP', 'RAY', 'HEX'];
+const today = () => new Date().toISOString().slice(0, 10);   // one UTC day for everyone, like Snaked's board
 
 export default {
   fetch(req, env) {
@@ -20,16 +21,22 @@ export default {
       if (req.headers.get('Upgrade') !== 'websocket') return new Response('expected a websocket', {status: 426});
       return env.ARENA.get(env.ARENA.idFromName('main')).fetch(req);
     }
-    // the menu asks how busy the arena is without opening a socket, so an idle tab costs nothing
-    if (url.pathname === '/count') return env.ARENA.get(env.ARENA.idFromName('main')).fetch(req);
+    // the menu asks how busy the arena is, and for the board, without opening a socket: an idle tab costs nothing
+    if (url.pathname === '/count' || url.pathname === '/top')
+      return env.ARENA.get(env.ARENA.idFromName('main')).fetch(req);
     return new Response('Re-Tron arena server', {status: url.pathname === '/' ? 200 : 404});
   },
 };
 
 export class Arena {
-  constructor() {
+  constructor(ctx) {
     this.socks = new Set();
     this.timer = null;
+    // The board outlives the arena: this.reset() wipes the ride, storage keeps the runs.
+    // ponytail: no pruning — a few thousand rows is nothing. Prune by day if it ever gets big.
+    this.sql = ctx.storage.sql;
+    this.sql.exec('CREATE TABLE IF NOT EXISTS runs (day TEXT, name TEXT, score INTEGER, secs REAL, kos INTEGER, at INTEGER)');
+    this.sql.exec('CREATE INDEX IF NOT EXISTS runs_day ON runs (day, score)');
     this.reset();
   }
   reset() {
@@ -43,10 +50,14 @@ export class Arena {
   }
 
   async fetch(req) {
+    const path = new URL(req.url).pathname;
     // a plain count: it must never start the tick, or asking the question would cost as much as playing
-    if (new URL(req.url).pathname === '/count')
+    if (path === '/count')
       return Response.json({on: [...this.bikes.values()].filter(b => !b.bot).length},
         {headers: {'access-control-allow-origin': '*'}});
+    // the board, read the same cheap way: the menu asks for it without ever waking the arena
+    if (path === '/top') return Response.json({day: today(), today: this.top(today()), all: this.top(null)},
+      {headers: {'access-control-allow-origin': '*'}});
     const pair = new WebSocketPair(), ws = pair[1];
     ws.accept();
     const s = {ws, bike: null, count: 0, windowAt: Date.now()};
@@ -139,11 +150,25 @@ export class Arena {
     b.alive = false;
     this.bikes.delete(b.id);
     for (let c = 0; c < this.owner.length; c++) if (this.owner[c] === b.id) this.owner[c] = 0;
+    const secs = (this.tick - b.start) / 10, score = Math.floor(secs) + 10 * b.kos;
     this.out.c.push(b.id);
-    this.out.e.push([b.id, killer, reason, Math.floor((this.tick - b.start) / 10) + 10 * b.kos, this.tick - b.start, b.kos]);
+    this.out.e.push([b.id, killer, reason, score, this.tick - b.start, b.kos]);
     const k = this.bikes.get(killer);
     if (k) k.kos++;
     if (b.sock) b.sock.bike = null;
+    // the referee records the run, so there is no score to forge: the client never sends one
+    if (!b.bot && b.name && score > 0)
+      this.sql.exec('INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)',
+        today(), b.name, score, Math.round(secs * 10) / 10, b.kos, Date.now());
+  }
+
+  // Best run per name, so one rider cannot fill the board. day = null means all time.
+  top(day) {
+    const where = day ? 'WHERE day = ?' : '', args = day ? [day] : [];
+    // one MAX() and bare columns: SQLite then takes secs and kos from that same best row
+    return [...this.sql.exec('SELECT name, MAX(score) AS score, secs, kos FROM runs ' +
+      where + ' GROUP BY name ORDER BY score DESC, secs DESC LIMIT 10', ...args)]
+      .map(r => [r.name, r.score, r.secs, r.kos]);
   }
 
   step() {

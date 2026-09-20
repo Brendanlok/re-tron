@@ -69,6 +69,22 @@
     50%{transform:scale(1.045);box-shadow:0 14px 46px rgba(72,162,243,.62);}}
   @media (prefers-reduced-motion:reduce){#startBtn{animation:none;}}
   #live{margin-top:10px!important;font-size:12px!important;color:#6b7a90!important;}
+  /* the menu board: same rows as the in-arena one, with Today / All time like Snaked */
+  #lb{margin:12px 0 2px;width:min(300px,86vw);}
+  #lb .tabs{display:flex;justify-content:center;gap:6px;margin-bottom:7px;}
+  #lb .tabs button{padding:5px 14px;border:0;border-radius:999px;cursor:pointer;font-family:inherit;
+    font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
+    background:rgba(70,88,122,.28);color:#8296b0;}
+  #lb .tabs button.on{background:rgba(87,211,255,.16);color:#57d3ff;}
+  #lb .rows{background:rgba(9,13,20,.55);border-radius:13px;padding:8px 12px;
+    -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);font-variant-numeric:tabular-nums;}
+  #lb .row{display:flex;align-items:baseline;gap:8px;padding:2px 0;font-size:12px;color:#c4cedd;}
+  #lb .row .pl{color:#67788f;width:15px;flex:none;}
+  #lb .row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;}
+  #lb .row .sub{color:#67788f;font-size:11px;}
+  #lb .row b{font-weight:800;color:#e8edf4;min-width:26px;text-align:right;}
+  #lb .row.you,#lb .row.you b{color:#57d3ff;}
+  #lb .none{color:#67788f;font-size:12px;padding:2px 0;}
   .how{font-size:12px!important;color:#6b7a90!important;margin-top:8px!important;}
   /* controls: arrow pad on the left, blade on the right, both over the arena (the view follows your bike) */
   #pad{position:fixed;left:calc(10px + env(safe-area-inset-left,0px));bottom:calc(14px + env(safe-area-inset-bottom,0px));
@@ -118,6 +134,10 @@
   <div id="nameRow"><input id="nameIn" maxlength="8" placeholder="your name" autocomplete="off" spellcheck="false" autocapitalize="characters" autocorrect="off" aria-label="Your name, up to 8 letters or numbers"></div>
   <button id="startBtn" disabled><span class="lbl" id="startLbl">Start</span><span class="sub" id="startSub">connecting…</span></button>
   <p id="live"></p>
+  <div id="lb" hidden>
+    <div class="tabs"><button id="lbToday" class="on">Today</button><button id="lbAll">All time</button></div>
+    <div class="rows" id="lbRows"></div>
+  </div>
   <p class="how" id="how"></p>
 </div>
 <script>
@@ -150,12 +170,37 @@ function connect() {
 }
 function hangUp() { const w = ws; ws = null; if (w) w.close(); bikes.clear(); walls.clear(); }
 function menuReady() { $('startBtn').disabled = false; $('startSub').textContent = isTouch ? 'tap to start' : 'click to start'; }
-// how busy the arena is, asked over plain http so the menu never holds a socket open
+// the menu's two questions — how busy is it, and who is winning — both over plain http,
+// so the menu never holds a socket open and never wakes the arena's tick
+const http = p => SERVER.replace(/^ws/, 'http').replace(/\/ws$/, p);
 function liveCount() {
-  fetch(SERVER.replace(/^ws/, 'http').replace(/\/ws$/, '/count')).then(r => r.json())
+  fetch(http('/count')).then(r => r.json())
     .then(d => { $('live').textContent = d.on ? d.on + (d.on === 1 ? ' rider' : ' riders') + ' in the arena now' : ''; })
     .catch(() => { $('live').textContent = ''; });
 }
+
+// ---- the board ---------------------------------------------------------------------------
+// The server is the only thing that writes a score, on the tick it knocks you out, so there is
+// nothing here to forge. Best run per rider, today and all time.
+let lbView = 'today', lbData = null;
+function loadTop() {
+  fetch(http('/top')).then(r => r.json()).then(d => { lbData = d; paintLb(); }).catch(() => {});
+}
+function paintLb() {
+  if (!lbData) return;
+  $('lb').hidden = false;
+  $('lbToday').classList.toggle('on', lbView === 'today');
+  $('lbAll').classList.toggle('on', lbView !== 'today');
+  const rows = lbData[lbView] || [];
+  $('lbRows').innerHTML = rows.length ? rows.map(([n, sc, secs, kos], i) =>
+    '<div class="row' + (n === myName ? ' you' : '') + '"><span class="pl">' + (i + 1) + '</span>' +
+    '<span class="nm">' + n.replace(/[<&]/g, '') + '</span>' +
+    '<span class="sub">' + secs.toFixed(1) + 's · ' + kos + ' KO' + (kos === 1 ? '' : 's') + '</span>' +
+    '<b>' + sc + '</b></div>').join('')
+    : '<div class="none">' + (lbView === 'today' ? 'No runs yet today — the first one is yours.' : 'No runs yet.') + '</div>';
+}
+$('lbToday').addEventListener('click', () => { lbView = 'today'; paintLb(); });
+$('lbAll').addEventListener('click', () => { lbView = 'all'; paintLb(); });
 const send = m => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
 
 function onMsg(m) {
@@ -218,7 +263,7 @@ function showResult(s, reason, killer) {
   if (s) { $('stats').hidden = false; $('stats').innerHTML = 'Score <b>' + s.score + '</b> &middot; Alive <b>' + s.secs.toFixed(1) + 's</b> &middot; <b>' + s.kos + '</b> KO' + (s.kos === 1 ? '' : 's'); }
   $('startLbl').textContent = 'Start again';
   if (reason !== 'lost') hangUp();
-  menuReady(); liveCount();
+  menuReady(); liveCount(); loadTop();
   $('overlay').hidden = false;
   $('hud').hidden = $('board').hidden = $('blade').hidden = $('pad').hidden = $('hint').hidden = true;
 }
@@ -351,7 +396,7 @@ function frame(now) {
   parts = parts.filter(p => p.life > 0);
   draw(); requestAnimationFrame(frame);
 }
-fit(); liveCount(); requestAnimationFrame(frame);
+fit(); liveCount(); loadTop(); requestAnimationFrame(frame);
 </script>
 </body>
 </html>

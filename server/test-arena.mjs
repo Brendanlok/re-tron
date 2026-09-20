@@ -57,6 +57,16 @@ for (let i = 0; i < 80 && alive(); i++) { A.send({t: 'turn', d: i % 20 < 10 ? 'U
 const ev = A.events.find(e => e[0] === A.you);
 assert(ev, 'crash is reported (' + (ev && ev[2]) + ')');
 
+// the board: the referee wrote that run down, and reading it needs no socket
+const TOP_ = COUNT_.replace(/\/count$/, '/top');
+const board = await (await fetch(TOP_)).json();
+const mine = board.today.find(r => r[0] === 'LOK');
+// the board keeps each rider's BEST run, so an earlier, better LOK run is allowed to be the one showing
+assert(mine && ev && mine[1] >= ev[3], 'the run is on today\'s board, at least the score the server gave it');
+assert(board.all.some(r => r[0] === 'LOK'), 'and on the all-time board');
+assert(board.today.every((r, i, a) => !i || a[i - 1][1] >= r[1]), 'the board is in score order');
+assert(new Set(board.today.map(r => r[0])).size === board.today.length, 'one row per rider, not one per run');
+
 // a second player sees the first; leaving removes the bike
 const B = client('B'); await B.open; await sleep(200);
 A.send({t: 'join', name: 'two'}); B.send({t: 'join', name: 'bee'}); await sleep(800);
