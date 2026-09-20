@@ -116,5 +116,37 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   assert([...a.bikes.values()].every(b => b.bot), 'and they are all bots when nobody has joined');
 }
 
+// ---- hearing about it when something breaks ----
+// The one endpoint a stranger can write to, so everything it accepts is checked here, and so is the
+// thing that would actually cost money: none of it may start the tick.
+{
+  const a = arena();
+  const post = body => a.say(new Request('http://x/say', {method: 'POST', body,
+    headers: {'content-type': 'text/plain', 'user-agent': 'TestPhone/1.0'}}));
+  const notes = () => a.runs.filter(r => r[0] === 'say' || r[0] === 'err');
+
+  is((await post(JSON.stringify({kind: 'say', name: 'LOK', body: 'blade is under my thumb'}))).status, 200,
+    'a player can say what broke');
+  is(notes()[0][3], 'TestPhone/1.0', 'and the server writes down what they were riding on');
+  is((await post(JSON.stringify({kind: 'err', body: 'boom @ index.html:12'}))).status, 200,
+    'the page can report its own crash');
+  is(notes()[1][0], 'err', 'and it is filed as a crash, not as a note');
+  await post(JSON.stringify({kind: 'nonsense', body: 'x'}));
+  is(notes()[2][0], 'say', 'anything else is filed as a note rather than trusted');
+
+  await post(JSON.stringify({name: 'AVERYLONGNAME', body: 'y'.repeat(900)}));
+  is(notes()[3][1].length, 8, 'a long name is cut to the eight a rider gets');
+  is(notes()[3][2].length, 600, 'and a long note is cut rather than refused');
+
+  is((await post(JSON.stringify({body: '   '}))).status, 400, 'an empty note is refused');
+  is((await post('not json')).status, 400, 'and so is junk');
+  is(notes().length, 4, 'neither wrote anything down');
+
+  for (let i = 0; i < 30; i++) await post(JSON.stringify({body: 'flood'}));
+  is((await post(JSON.stringify({body: 'flood'}))).status, 429, 'a flood is turned away after 30 in a minute');
+
+  is(a.timer, null, 'and none of it started the arena ticking, which is what would cost money');
+}
+
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);

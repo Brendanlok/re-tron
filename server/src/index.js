@@ -26,6 +26,18 @@ export default {
     // the menu asks how busy the arena is, and for the board, without opening a socket: an idle tab costs nothing
     if (url.pathname === '/count' || url.pathname === '/top')
       return env.ARENA.get(env.ARENA.idFromName('main')).fetch(req);
+    // a player saying something broke, and the page reporting its own crash. Neither wakes the tick.
+    if (url.pathname === '/say') {
+      if (req.method === 'OPTIONS') return new Response(null, {headers: {'access-control-allow-origin': '*',
+        'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'POST'}});
+      if (req.method !== 'POST') return new Response('post it', {status: 405});
+      return env.ARENA.get(env.ARENA.idFromName('main')).fetch(req);
+    }
+    // reading the inbox, behind the ADMIN secret. Unset means nobody reads it, rather than everybody.
+    if (url.pathname === '/inbox') {
+      if (!env.ADMIN || url.searchParams.get('key') !== env.ADMIN) return new Response('no', {status: 403});
+      return env.ARENA.get(env.ARENA.idFromName('main')).fetch(req);
+    }
     return new Response('Re-Tron arena server', {status: url.pathname === '/' ? 200 : 404});
   },
 };
@@ -39,6 +51,10 @@ export class Arena {
     this.sql = ctx.storage.sql;
     this.sql.exec('CREATE TABLE IF NOT EXISTS runs (day TEXT, name TEXT, score INTEGER, secs REAL, kos INTEGER, at INTEGER)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS runs_day ON runs (day, score)');
+    // Anything that fails silently is a launch blocker, so both ways of hearing about it land in one table:
+    // kind 'say' is a player typing it, kind 'err' is the page reporting its own crash.
+    this.sql.exec('CREATE TABLE IF NOT EXISTS notes (kind TEXT, name TEXT, body TEXT, ua TEXT, at INTEGER)');
+    this.said = {n: 0, at: 0};
     this.reset();
   }
   reset() {
@@ -60,6 +76,10 @@ export class Arena {
     // the board, read the same cheap way: the menu asks for it without ever waking the arena
     if (path === '/top') return Response.json({day: today(), today: this.top(today()), all: this.top(null)},
       {headers: {'access-control-allow-origin': '*'}});
+    if (path === '/say') return this.say(req);
+    // newest first, everything in one list: there is little enough of it that filtering can wait
+    if (path === '/inbox') return Response.json(
+      [...this.sql.exec('SELECT kind, name, body, ua, at FROM notes ORDER BY at DESC LIMIT 200')]);
     const pair = new WebSocketPair(), ws = pair[1];
     ws.accept();
     const s = {ws, bike: null, count: 0, windowAt: Date.now()};
@@ -171,6 +191,23 @@ export class Arena {
     return [...this.sql.exec('SELECT name, MAX(score) AS score, secs, kos FROM runs ' +
       where + ' GROUP BY name ORDER BY score DESC, secs DESC LIMIT 10', ...args)]
       .map(r => [r.name, r.score, r.secs, r.kos]);
+  }
+
+  // A note from a player, or a crash the page caught itself. Everything is capped and nothing is trusted:
+  // this is the one endpoint a stranger can write to.
+  // ponytail: the flood guard counts in memory, which is fine here and only here — the Durable Object
+  // is a single instance, unlike a Worker isolate. A wake resets the count; storage is cheap, wiping is Lok's.
+  async say(req) {
+    const now = Date.now(), cors = {'access-control-allow-origin': '*'};
+    if (now - this.said.at > 60000) this.said = {n: 0, at: now};
+    if (++this.said.n > 30) return new Response('slow down', {status: 429, headers: cors});
+    let m; try { m = JSON.parse(await req.text()); } catch (e) { return new Response('bad', {status: 400, headers: cors}); }
+    const cut = (v, n) => String(v === undefined || v === null ? '' : v).slice(0, n);
+    const body = cut(m.body, 600).trim();
+    if (!body) return new Response('empty', {status: 400, headers: cors});
+    this.sql.exec('INSERT INTO notes VALUES (?, ?, ?, ?, ?)',
+      m.kind === 'err' ? 'err' : 'say', cut(m.name, 8), body, cut(req.headers.get('user-agent'), 160), now);
+    return new Response('ok', {headers: cors});
   }
 
   step() {
