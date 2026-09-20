@@ -5,6 +5,8 @@ const W = 40, H = 60, TICK_MS = 100;
 const BLADE_TICKS = 30;      // a full charge lasts 3s of blade
 const RECHARGE_TICKS = 60;   // empty to full in 6s
 const EMPTY_GAP = 10;        // run it dry and recharging waits 1s first
+const FULL = 600;            // charge is kept in sixths of a percent, so 3s of blade (20 a tick) and
+                             // 6s of recharge (10 a tick) are whole numbers: a float here made the blade last 3.1s
 const WALL_TICKS = 80;       // a barricade stands for 8s
 const TARGET = 6;            // bots top the arena up to this many bikes
 const MAX_HUMANS = 12;
@@ -126,7 +128,7 @@ export class Arena {
     }
     if (bestAt && bestAt[3] >= 8) {
       const [x, y, dir] = bestAt;
-      const b = {id: this.nextId++, x, y, dir, queue: [], alive: true, bot, name: name || '', charge: 100, gap: 0,
+      const b = {id: this.nextId++, x, y, dir, queue: [], alive: true, bot, name: name || '', charge: FULL, gap: 0,
         blade: false, want: false, kos: 0, start: this.tick, bladeFor: 0};
       if (bot) b.name = BOT_NAMES[b.id % BOT_NAMES.length];
       this.bikes.set(b.id, b);
@@ -187,10 +189,10 @@ export class Arena {
       // charge: drains while the blade is out, then recharges; running dry adds a short wait first
       b.blade = b.want && b.charge > 0;
       if (b.blade) {
-        b.charge -= 100 / BLADE_TICKS;
+        b.charge -= FULL / BLADE_TICKS;
         if (b.charge <= 0) { b.charge = 0; b.want = false; b.gap = EMPTY_GAP; }
       } else if (b.gap > 0) b.gap--;
-      else b.charge = Math.min(100, b.charge + 100 / RECHARGE_TICKS);
+      else b.charge = Math.min(FULL, b.charge + FULL / RECHARGE_TICKS);
       b.nx = b.x + DIRS[b.dir][0]; b.ny = b.y + DIRS[b.dir][1];
     }
     // a bike with the blade out lays a barricade on the cell it is leaving
@@ -231,7 +233,7 @@ export class Arena {
     this.walls.push([c, this.tick]);
     this.out.a.push([c, id]);
   }
-  pack(b) { return [b.id, b.x, b.y, DI[b.dir], b.blade ? 1 : 0, Math.round(b.charge)]; }
+  pack(b) { return [b.id, b.x, b.y, DI[b.dir], b.blade ? 1 : 0, Math.round(b.charge * 100 / FULL)]; }
 
   // Bots: pick the turn with the most open floor behind it (a capped flood fill), mostly go straight,
   // slip now and then so they can be beaten, and swing the blade out when someone is close.
@@ -248,7 +250,7 @@ export class Arena {
     }
     b.dir = best;
     if (b.bladeFor > 0) { if (--b.bladeFor === 0) b.want = false; return; }
-    if (!b.blade && b.charge > 60 && Math.random() < 0.3 &&
+    if (!b.blade && b.charge > FULL * 0.6 && Math.random() < 0.3 &&
         [...this.bikes.values()].some(o => o !== b && this.tick - o.start > 20 &&   // give a fresh rider 2s before hunting them
           Math.abs(o.x - b.x) + Math.abs(o.y - b.y) < 7)) {
       b.want = true; b.bladeFor = 8 + Math.floor(Math.random() * 14);

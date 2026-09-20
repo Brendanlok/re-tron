@@ -50,7 +50,7 @@ if (alive()) {
   assert(zeros >= 8, 'charge waits at zero before recharging (' + zeros + ' ticks)');
   const walls = A.ticks.flatMap(t => t.a || []).filter(([, o]) => o === A.you).length;
   assert(walls >= 25, 'blade laid a barricade (' + walls + ' cells)');
-} else console.log('skip  blade timing: crashed during it');
+} else console.log('skip  blade timing: crashed during it - test-arena-headless.mjs checks it properly');
 
 // steer into the edge and check the crash is reported
 for (let i = 0; i < 80 && alive(); i++) { A.send({t: 'turn', d: i % 20 < 10 ? 'U' : 'L'}); await sleep(100); }
