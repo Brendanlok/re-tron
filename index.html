@@ -155,6 +155,7 @@ const rgb = (c, a) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (a === un
 let W = 40, H = 60, WALL_TICKS = 80, TICK_MS = 100;
 let ws = null, me = 0, tick = 0, tickAt = 0, bikes = new Map(), walls = new Map(), names = new Map();
 let myStart = 0, myKos = 0, riding = false, parts = [], bladeOn = false, myName = '';
+let armAt = 0;   // space is the blade while riding, so the knocked-out screen ignores it for a moment
 let waves = [], shake = 0;   // the rings a crash throws off, and the kick your own crash gives the camera
 
 // ---- server ------------------------------------------------------------------------------
@@ -172,7 +173,7 @@ function connect() {
   sock.onerror = () => sock.close();
 }
 function hangUp() { const w = ws; ws = null; if (w) w.close(); bikes.clear(); walls.clear(); }
-function menuReady() { $('startBtn').disabled = false; $('startSub').textContent = isTouch ? 'tap to start' : 'click to start'; }
+function menuReady() { $('startBtn').disabled = false; $('startSub').textContent = isTouch ? 'tap to start' : 'space or click'; }
 // the menu's two questions — how busy is it, and who is winning — both over plain http,
 // so the menu never holds a socket open and never wakes the arena's tick
 const http = p => SERVER.replace(/^ws/, 'http').replace(/\/ws$/, p);
@@ -282,6 +283,7 @@ function showResult(s, reason, killer) {
   if (s) { $('stats').hidden = false; $('stats').innerHTML = 'Score <b>' + s.score + '</b> &middot; Alive <b>' + s.secs.toFixed(1) + 's</b> &middot; <b>' + s.kos + '</b> KO' + (s.kos === 1 ? '' : 's'); }
   $('startLbl').textContent = 'Start again';
   if (reason !== 'lost') hangUp();
+  armAt = performance.now() + 500;   // you died with your thumb on the blade; don't restart out from under the score
   menuReady(); liveCount(); loadTop();
   $('overlay').hidden = false;
   $('hud').hidden = $('board').hidden = $('blade').hidden = $('pad').hidden = $('hint').hidden = true;
@@ -316,7 +318,13 @@ const KEYS = {ArrowUp: 'U', ArrowDown: 'D', ArrowLeft: 'L', ArrowRight: 'R', w: 
 addEventListener('keydown', e => {
   if (e.target === $('nameIn') && e.key !== 'Enter') return;
   if (KEYS[e.key]) { e.preventDefault(); turn(KEYS[e.key]); return; }
-  if (e.key === ' ') { e.preventDefault(); if (riding) blade(!bladeOn); return; }
+  if (e.key === ' ') {
+    e.preventDefault();
+    if (riding) blade(!bladeOn);
+    // off the bike, space is the way back on - but not on a key still held down from the last run
+    else if (!e.repeat && performance.now() > armAt && !$('overlay').hidden && !$('startBtn').disabled) join();
+    return;
+  }
   if (e.key === 'Enter' && !$('overlay').hidden && !$('startBtn').disabled) join();
 });
 for (const btn of $('pad').querySelectorAll('button')) {
