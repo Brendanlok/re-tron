@@ -131,6 +131,27 @@
   #saySend[disabled]{opacity:.5;cursor:default;}
   #sayMsg{margin-top:9px!important;min-height:15px;color:#57d3ff!important;font-size:11px!important;}
   #sayMsg.bad{color:#ff9d8a!important;}
+  /* Sideways on a phone: the arena is 40 wide by 60 tall, so landscape shows a sliver. There is no pause
+     in a shared arena, so while you are riding this is a banner that says so and lets you keep steering —
+     it only becomes a full card on the menu, where nothing is at stake. No JS: which one you get is
+     whether the menu is up, and #rot sits after #overlay so a sibling selector can tell. */
+  #rot{display:none;position:fixed;z-index:55;align-items:center;justify-content:center;
+    top:calc(8px + env(safe-area-inset-top,0px));left:0;right:0;
+    color:#e8edf4;text-align:center;pointer-events:none;}
+  @media (pointer:coarse) and (orientation:landscape){ #rot{display:flex;} }
+  #rot .card{padding:10px 18px;border-radius:14px;background:rgba(15,23,36,.94);
+    border:1px solid rgba(255,157,138,.34);box-shadow:0 12px 34px rgba(0,0,0,.5);}
+  #rot h2{margin:0;font-size:14px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#ff9d8a;}
+  #rot p{margin:4px 0 0;color:#9fadc1;font-size:12px;line-height:1.5;max-width:300px;}
+  #rot b{color:#e8edf4;}
+  #rot .m{display:none;}                    /* riding: the banner, out of the way at the top */
+  /* menu: nothing is at stake, so take the screen — and take the taps too, so nobody starts a run sideways */
+  #overlay:not([hidden]) ~ #rot{inset:0;padding:20px;pointer-events:auto;
+    background:rgba(5,8,13,.86);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);}
+  #overlay:not([hidden]) ~ #rot .card{padding:18px 22px;}
+  #overlay:not([hidden]) ~ #rot h2{font-size:17px;}
+  #overlay:not([hidden]) ~ #rot .m{display:block;}
+  #overlay:not([hidden]) ~ #rot .r{display:none;}
 </style>
 </head>
 <body>
@@ -171,6 +192,13 @@
     <textarea id="sayTx" maxlength="600" placeholder="What happened?" aria-label="What happened?"></textarea>
     <div class="btns"><button id="sayCancel" type="button">Cancel</button><button id="saySend" type="button">Send</button></div>
     <p id="sayMsg"></p>
+  </div>
+</div>
+<div id="rot" role="status" aria-live="polite">
+  <div class="card">
+    <h2>Turn your phone back</h2>
+    <p class="m">The arena is tall. Sideways you only get a sliver of it, and you will not see what is coming.</p>
+    <p class="r">Your bike is <b>still riding</b>, and still in danger &mdash; nothing pauses in a shared arena.</p>
   </div>
 </div>
 <script>
