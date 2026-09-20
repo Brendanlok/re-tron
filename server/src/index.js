@@ -15,11 +15,13 @@ const BOT_NAMES = ['VOLT', 'NEON', 'ARC', 'FLUX', 'ION', 'GRID', 'PULSE', 'ZAP',
 export default {
   fetch(req, env) {
     const url = new URL(req.url);
+    // ponytail: one arena for everyone; open a second one by name when MAX_HUMANS is actually hit
     if (url.pathname === '/ws') {
       if (req.headers.get('Upgrade') !== 'websocket') return new Response('expected a websocket', {status: 426});
-      // ponytail: one arena for everyone; open a second one by name when MAX_HUMANS is actually hit
       return env.ARENA.get(env.ARENA.idFromName('main')).fetch(req);
     }
+    // the menu asks how busy the arena is without opening a socket, so an idle tab costs nothing
+    if (url.pathname === '/count') return env.ARENA.get(env.ARENA.idFromName('main')).fetch(req);
     return new Response('Re-Tron arena server', {status: url.pathname === '/' ? 200 : 404});
   },
 };
@@ -40,7 +42,11 @@ export class Arena {
     this.out = {a: [], c: [], e: [], n: []};
   }
 
-  async fetch() {
+  async fetch(req) {
+    // a plain count: it must never start the tick, or asking the question would cost as much as playing
+    if (new URL(req.url).pathname === '/count')
+      return Response.json({on: [...this.bikes.values()].filter(b => !b.bot).length},
+        {headers: {'access-control-allow-origin': '*'}});
     const pair = new WebSocketPair(), ws = pair[1];
     ws.accept();
     const s = {ws, bike: null, count: 0, windowAt: Date.now()};

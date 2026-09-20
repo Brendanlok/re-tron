@@ -132,20 +132,29 @@ const rgb = (c, a) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (a === un
 
 let W = 40, H = 60, WALL_TICKS = 80, TICK_MS = 100;
 let ws = null, me = 0, tick = 0, tickAt = 0, bikes = new Map(), walls = new Map(), names = new Map();
-let myStart = 0, myKos = 0, riding = false, parts = [], bladeOn = false, retry = null;
+let myStart = 0, myKos = 0, riding = false, parts = [], bladeOn = false, myName = '';
 
 // ---- server ------------------------------------------------------------------------------
+// The socket is open only while riding. The arena ticks ten times a second for as long as anyone
+// is connected, so a tab left sitting on the menu used to keep the whole arena running for nothing.
 function connect() {
-  ws = new WebSocket(SERVER);
-  ws.onopen = () => { $('startSub').textContent = isTouch ? 'tap to start' : 'click to start'; $('startBtn').disabled = false; };
-  ws.onmessage = e => onMsg(JSON.parse(e.data));
-  ws.onclose = () => {
-    $('startBtn').disabled = true; $('startSub').textContent = 'reconnecting…';
-    if (riding) { riding = false; showResult(null, 'lost'); }
-    bikes.clear(); walls.clear();
-    clearTimeout(retry); retry = setTimeout(connect, 2000);
+  const sock = ws = new WebSocket(SERVER);
+  sock.onopen = () => send({t: 'join', name: myName});
+  sock.onmessage = e => onMsg(JSON.parse(e.data));
+  sock.onclose = () => {
+    if (ws !== sock) return;   // one we already hung up on, on its way out
+    ws = null; bikes.clear(); walls.clear();
+    if (riding) { riding = false; showResult(null, 'lost'); } else menuReady();
   };
-  ws.onerror = () => ws.close();
+  sock.onerror = () => sock.close();
+}
+function hangUp() { const w = ws; ws = null; if (w) w.close(); bikes.clear(); walls.clear(); }
+function menuReady() { $('startBtn').disabled = false; $('startSub').textContent = isTouch ? 'tap to start' : 'click to start'; }
+// how busy the arena is, asked over plain http so the menu never holds a socket open
+function liveCount() {
+  fetch(SERVER.replace(/^ws/, 'http').replace(/\/ws$/, '/count')).then(r => r.json())
+    .then(d => { $('live').textContent = d.on ? d.on + (d.on === 1 ? ' rider' : ' riders') + ' in the arena now' : ''; })
+    .catch(() => { $('live').textContent = ''; });
 }
 const send = m => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
 
@@ -161,6 +170,8 @@ function onMsg(m) {
     $('overlay').hidden = true; $('hud').hidden = $('board').hidden = $('hint').hidden = false;
     $('blade').hidden = $('pad').hidden = !isTouch;   // on a computer the space bar is the blade
   } else if (m.t === 'full') {
+    hangUp();   // turned away: let the arena go rather than sitting on an open socket
+    $('startBtn').disabled = false;
     $('startSub').textContent = 'arena is full — try again';
   } else if (m.t === 'k') {
     tick = m.k; tickAt = performance.now();
@@ -206,6 +217,8 @@ function showResult(s, reason, killer) {
     : 'The arena keeps going without you. Jump back in.';
   if (s) { $('stats').hidden = false; $('stats').innerHTML = 'Score <b>' + s.score + '</b> &middot; Alive <b>' + s.secs.toFixed(1) + 's</b> &middot; <b>' + s.kos + '</b> KO' + (s.kos === 1 ? '' : 's'); }
   $('startLbl').textContent = 'Start again';
+  if (reason !== 'lost') hangUp();
+  menuReady(); liveCount();
   $('overlay').hidden = false;
   $('hud').hidden = $('board').hidden = $('blade').hidden = $('pad').hidden = $('hint').hidden = true;
 }
@@ -260,11 +273,12 @@ cv.addEventListener('pointermove', e => {
 addEventListener('pointerup', () => { swipe = null; });
 function join() {
   const n = $('nameIn').value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
-  $('nameIn').value = n;
-  send({t: 'join', name: n});
+  $('nameIn').value = n; myName = n;
+  $('startBtn').disabled = true; $('startSub').textContent = 'connecting…';
+  if (ws) send({t: 'join', name: n}); else connect();
 }
 $('startBtn').addEventListener('click', join);
-$('startSub').textContent = 'connecting…';
+menuReady();
 $('how').textContent = isTouch ? 'arrows steer · BLADE lays the wall' : 'arrow keys or WASD steer · space deploys the blade';
 $('hint').textContent = isTouch ? '' : 'space deploys the blade';
 
@@ -337,7 +351,7 @@ function frame(now) {
   parts = parts.filter(p => p.life > 0);
   draw(); requestAnimationFrame(frame);
 }
-fit(); connect(); requestAnimationFrame(frame);
+fit(); liveCount(); requestAnimationFrame(frame);
 </script>
 </body>
 </html>

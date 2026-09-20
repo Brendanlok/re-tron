@@ -1,5 +1,7 @@
 // Smoke test for the Re-Tron arena server: two players, blade charge cycle, crashes, leaving.
 const URL_ = process.argv[2] || 'ws://localhost:8787/ws';
+const COUNT_ = URL_.replace(/^ws/, 'http').replace(/\/ws$/, '/count');
+const count = async () => (await fetch(COUNT_)).json();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const assert = (c, m) => { if (!c) { console.log('FAIL', m); process.exitCode = 1; } else console.log('ok  ', m); };
 
@@ -21,6 +23,7 @@ const A = client('A'); await A.open; await sleep(300);
 assert(A.hi && A.hi.W === 40 && A.hi.H === 60, 'hello arrives with the arena size');
 A.send({t: 'join', name: 'lok!!'}); await sleep(1500);
 assert(A.you > 0, 'join gives an id');
+assert((await count()).on >= 1, 'the count endpoint sees the rider without opening a socket');
 assert(A.names.get(A.you) === 'LOK', 'name is cleaned to LOK');
 const last = A.ticks[A.ticks.length - 1];
 assert(A.ticks.length >= 10 && A.ticks.length <= 20, 'about 10 ticks a second (' + A.ticks.length + ' in 1.5s)');
@@ -62,4 +65,15 @@ const bid = B.you; B.ws.close(); await sleep(600);
 assert(!A.ticks[A.ticks.length - 1].b.some(b => b[0] === bid), 'B leaving removes their bike');
 assert(A.events.some(e => e[0] === bid && e[2] === 'left'), 'leaving is reported as left');
 A.ws.close();
+await sleep(600);
+
+// The cost guard: with nobody connected the arena must be stopped, not ticking away on the meter.
+// Asking how busy it is must not wake the tick either, or the menu would cost as much as playing.
+assert((await count()).on === 0, 'the arena is empty once the last socket closes');
+await sleep(1000);
+await count();
+await sleep(1000);
+const C = client('C'); await C.open; await sleep(200);
+assert(C.hi && C.hi.k <= 3, 'the arena did not tick while nobody was connected (k=' + (C.hi && C.hi.k) + ')');
+C.ws.close();
 await sleep(200); process.exit();
