@@ -250,6 +250,7 @@ let waves = [], shake = 0;   // the rings a crash throws off, and the kick your 
 // is connected, so a tab left sitting on the menu used to keep the whole arena running for nothing.
 function connect() {
   const sock = ws = new WebSocket(SERVER);
+  bikes.clear(); walls.clear();   // the menu's pretend riders go before the real arena arrives
   sock.onopen = () => send({t: 'join', name: myName});
   sock.onmessage = e => onMsg(JSON.parse(e.data));
   sock.onclose = () => {
@@ -714,6 +715,38 @@ function draw() {
   ctx.shadowBlur = 0; ctx.globalAlpha = 1;
   ctx.restore();
 }
+// ---- the menu's attract loop --------------------------------------------------------------
+// With no socket open the menu used to show an empty floor, which read as dead. These riders live
+// entirely in the page: no server, no cost, no score, no sound. They only move while there is no
+// socket, and connecting wipes them, so they never mix with the real arena.
+const DEMO = [1001, 1002, 1003, 1004], DV = {U: [0, -1], D: [0, 1], L: [-1, 0], R: [1, 0]};
+let demoAt = 0;
+function demoStep() {
+  tick++; tickAt = performance.now();
+  for (const [c, w] of walls) if (w.born + WALL_TICKS <= tick) walls.delete(c);
+  const free = (x, y) => x >= 0 && y >= 0 && x < W && y < H && !walls.has(y * W + x);
+  for (const id of DEMO) {
+    const k = bikes.get(id);
+    if (!k) {                                               // out: ride back in after a short pause
+      const x = 4 + (Math.random() * (W - 8) | 0), y = 4 + (Math.random() * (H - 8) | 0);
+      if (Math.random() < 0.03 && free(x, y)) bikes.set(id, {id, x, y, px: x, py: y, d: DIRN[Math.random() * 4 | 0], blade: false, charge: 100});
+      continue;
+    }
+    k.px = k.x; k.py = k.y;
+    // ponytail: one cell of look-ahead and a 6% itch to turn, not the server's bot brain; they box themselves in, which is the show
+    const opts = DIRN.filter(d => d !== BACK[k.d] && free(k.x + DV[d][0], k.y + DV[d][1]));
+    if (opts.length && (!opts.includes(k.d) || Math.random() < 0.06)) k.d = opts[Math.random() * opts.length | 0];
+    if (k.blade) { walls.set(k.y * W + k.x, {o: id, born: tick}); k.charge -= 100 / 30; }
+    else k.charge = Math.min(100, k.charge + 100 / 60);
+    if (k.blade ? k.charge <= 0 || Math.random() < 0.03 : k.charge > 60 && Math.random() < 0.04) k.blade = !k.blade;
+    k.x += DV[k.d][0]; k.y += DV[k.d][1];
+    if (!free(k.x, k.y)) {
+      derez(k.px, k.py, colOf(id), k.d);
+      for (const [c, w] of walls) if (w.o === id) walls.delete(c);
+      bikes.delete(id);
+    }
+  }
+}
 let last = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000 || 0); last = now;
@@ -725,6 +758,7 @@ function frame(now) {
   for (const w of waves) w.t += dt;
   waves = waves.filter(w => w.t < WAVE_S);
   shake = Math.max(0, shake - dt * 3.2);
+  if (!ws && now - demoAt >= TICK_MS) { demoAt = now; demoStep(); }
   draw(); requestAnimationFrame(frame);
 }
 fit(); liveCount(); loadTop(); requestAnimationFrame(frame);
