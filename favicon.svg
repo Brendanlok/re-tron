@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The home-screen icon redrawn bold for a 16px tab: the cyan ribbon turning a corner into the bike's white nose. -->
+  <rect width="32" height="32" rx="7" fill="#0a0e14"/>
+  <path d="M7 24V13H17" fill="none" stroke="#57d3ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="17" y="10" width="11" height="6" rx="3" fill="#1a2a3c"/>
+  <rect x="22" y="11" width="6" height="4" rx="2" fill="#ffffff"/>
+</svg>
