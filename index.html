@@ -483,12 +483,14 @@ showSound();
 let pend = [], pendAt = 0;
 function turn(d) {
   const b = bikes.get(me);
-  if (!riding || !b) return;
+  if (!riding || !b) return false;
   const last = pend.length ? pend[pend.length - 1] : b.d;
-  if (d === last || d === BACK[last] || pend.length >= 2) return;
+  if (d === last) return true;                     // already heading that way
+  if (d === BACK[last] || pend.length >= 2) return false;
   pend.push(d); pendAt = tick;
   SFX.turn();
   send({t: 'turn', d});
+  return true;
 }
 function blade(on) { if (!riding) return; bladeOn = on; send({t: 'blade', on}); $('blade').classList.toggle('on', on); }
 const KEYS = {ArrowUp: 'U', ArrowDown: 'D', ArrowLeft: 'L', ArrowRight: 'R', w: 'U', s: 'D', a: 'L', d: 'R', W: 'U', S: 'D', A: 'L', D: 'R'};
@@ -515,9 +517,9 @@ function padAt(e) {
   if (Math.hypot(dx, dy) < r.width * 0.12) return;
   const d = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'R' : 'L') : (dy > 0 ? 'D' : 'U');
   if (d === padDir) return;
-  padDir = d;
   for (const btn of pad.children) btn.classList.toggle('on', btn.dataset.d === d);
-  turn(d);
+  // only remember a turn the bike took; a refused one (two already queued this tick) is retried on the next move
+  if (turn(d)) padDir = d;
 }
 pad.addEventListener('pointerdown', e => {
   e.preventDefault(); padId = e.pointerId; padDir = null; padAt(e);
