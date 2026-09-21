@@ -303,7 +303,7 @@ function onMsg(m) {
     for (const [id, n, bot] of m.names) names.set(id, {n, bot});
     for (const b of m.bikes) setBike(b);
   } else if (m.t === 'you') {
-    me = m.id; riding = true; myStart = tick; myKos = 0; bladeOn = false; paint();
+    me = m.id; riding = true; myStart = tick; pend = []; myKos = 0; bladeOn = false; paint();
     $('overlay').hidden = true; $('hud').hidden = $('board').hidden = $('hint').hidden = false;
     $('blade').hidden = $('pad').hidden = !isTouch;   // on a computer the space bar is the blade
   } else if (m.t === 'full') {
@@ -316,6 +316,9 @@ function onMsg(m) {
     const seen = new Set();
     for (const b of m.b) { setBike(b); seen.add(b[0]); }
     for (const id of [...bikes.keys()]) if (!seen.has(id)) bikes.delete(id);
+    const mb = bikes.get(me);
+    if (mb && pend[0] === mb.d) pend.shift();   // the server has taken the oldest one
+    if (tick - pendAt > 10) pend = [];          // one it never took (a lost race): stop judging against it
     for (const [c, o] of m.a || []) walls.set(c, {o, born: tick});
     for (const id of m.c || []) for (const [c, w] of walls) if (w.o === id) walls.delete(c);
     for (const [c, w] of walls) if (w.born + WALL_TICKS <= tick) walls.delete(c);
@@ -467,9 +470,15 @@ $('sndRun').addEventListener('click', e => { e.preventDefault(); setSound(!sound
 showSound();
 
 // ---- input -------------------------------------------------------------------------------
+// Turns sent but not yet seen on the bike. The server queues two per tick so a quick U-turn or a
+// sidestep works; judging the second press against the bike's current heading dropped it here instead.
+let pend = [], pendAt = 0;
 function turn(d) {
   const b = bikes.get(me);
-  if (!riding || !b || d === b.d || d === BACK[b.d]) return;
+  if (!riding || !b) return;
+  const last = pend.length ? pend[pend.length - 1] : b.d;
+  if (d === last || d === BACK[last] || pend.length >= 2) return;
+  pend.push(d); pendAt = tick;
   SFX.turn();
   send({t: 'turn', d});
 }
@@ -653,13 +662,13 @@ function draw() {
     const col = colOf(g.o);
     ctx.beginPath();
     for (const c of g.cells) {
-      const gx = c % W, gy = (c / W) | 0, px = (gx + 0.5) * cell, py = (gy + 0.5) * cell;
+      const gx = c % W, gy = (c / W) | 0, px = (gx + 0.5) * cell, py = (gy + 0.5) * cell, w = walls.get(c);
       let joined = false;
       for (const [dx, dy] of NB) {
         const nx = gx + dx, ny = gy + dy;
         if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
         const n = walls.get(ny * W + nx);
-        if (!n || n.o !== g.o) continue;
+        if (!n || n.o !== g.o || Math.abs(n.born - w.born) !== 1) continue;   // laid one after the other, not just side by side
         ctx.moveTo(px, py); ctx.lineTo(px + dx * cell / 2, py + dy * cell / 2);
         joined = true;
       }
