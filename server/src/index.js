@@ -33,8 +33,9 @@ export default {
       if (req.method !== 'POST') return new Response('post it', {status: 405});
       return env.ARENA.get(env.ARENA.idFromName('main')).fetch(req);
     }
-    // reading the inbox, behind the ADMIN secret. Unset means nobody reads it, rather than everybody.
-    if (url.pathname === '/inbox') {
+    // reading the inbox, and clearing junk runs off the board, behind the ADMIN secret.
+    // Unset means nobody gets in, rather than everybody.
+    if (url.pathname === '/inbox' || url.pathname === '/board') {
       if (!env.ADMIN || url.searchParams.get('key') !== env.ADMIN) return new Response('no', {status: 403});
       return env.ARENA.get(env.ARENA.idFromName('main')).fetch(req);
     }
@@ -77,6 +78,10 @@ export class Arena {
     if (path === '/top') return Response.json({day: today(), today: this.top(today()), all: this.top(null)},
       {headers: {'access-control-allow-origin': '*'}});
     if (path === '/say') return this.say(req);
+    // clearing the board. GET lists every run; POST ?wipe=1 empties it and POST ?name=RIDER drops that
+    // rider's runs, then both list what is left. Removing anything needs a POST, so nothing that merely
+    // follows the link — a preview, a prefetch, a bookmark — can empty the board by accident.
+    if (path === '/board') return this.board(req);
     // newest first, everything in one list: there is little enough of it that filtering can wait
     if (path === '/inbox') return Response.json(
       [...this.sql.exec('SELECT kind, name, body, ua, at FROM notes ORDER BY at DESC LIMIT 200')]);
@@ -191,6 +196,20 @@ export class Arena {
     return [...this.sql.exec('SELECT name, MAX(score) AS score, secs, kos FROM runs ' +
       where + ' GROUP BY name ORDER BY score DESC, secs DESC LIMIT 10', ...args)]
       .map(r => [r.name, r.score, r.secs, r.kos]);
+  }
+
+  // Lok taking junk runs off the board. Two weeks of testing before launch leave rows nobody wants
+  // players to see, and the all-time board is what the game is judged by on day one.
+  // ponytail: a rider is deleted whole rather than run by run — the board only ever shows the best
+  // run per name, so that is the row you are looking at. Per-run deletion if a real name ever needs it.
+  board(req) {
+    const q = new URL(req.url).searchParams;
+    if (req.method === 'POST') {
+      if (q.get('wipe') === '1') this.sql.exec('DELETE FROM runs');
+      else if (q.get('name')) this.sql.exec('DELETE FROM runs WHERE name = ?', q.get('name'));
+      else return new Response('ask for ?wipe=1 or ?name=RIDER', {status: 400});
+    }
+    return Response.json([...this.sql.exec('SELECT day, name, score, secs, kos, at FROM runs ORDER BY at DESC LIMIT 500')]);
   }
 
   // A note from a player, or a crash the page caught itself. Everything is capped and nothing is trusted:

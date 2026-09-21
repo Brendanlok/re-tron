@@ -148,5 +148,37 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   is(a.timer, null, 'and none of it started the arena ticking, which is what would cost money');
 }
 
+// ---- clearing the board ----
+// The only way a bad run ever comes off the board, so both halves are checked: the door, and the delete.
+{
+  const worker = (await import('./src/index.js')).default;
+  const reached = [];
+  const env = {ADMIN: 'sekrit', ARENA: {idFromName: () => 1, get: () => ({fetch: r => { reached.push(r.url); return new Response('in'); }})}};
+  const door = u => worker.fetch(new Request(u), env);
+  is((await door('http://x/board')).status, 403, 'no key, no board');
+  is((await door('http://x/board?key=wrong')).status, 403, 'and the wrong key is no better');
+  is((await door('http://x/board?key=sekrit')).status, 200, 'the ADMIN secret gets in');
+  is((await worker.fetch(new Request('http://x/board?key=sekrit'), {ARENA: env.ARENA})).status, 403,
+    'and with no secret set nobody gets in, rather than everybody');
+  is(reached.length, 1, 'only the one allowed request ever reached the arena');
+
+  // a list of rows standing in for the table, so the deletes can actually be seen to happen
+  const a = arena();
+  let rows = [{day: '2026-09-20', name: 'TEST', score: 7, secs: 7, kos: 0, at: 1},
+              {day: '2026-09-20', name: 'LOK', score: 40, secs: 30, kos: 1, at: 2}];
+  a.sql.exec = (q, ...args) => {
+    if (/^DELETE/.test(q)) rows = args.length ? rows.filter(r => r.name !== args[0]) : [];
+    return /^SELECT/.test(q) ? rows : [];
+  };
+  const board = (method, qs = '') => a.fetch(new Request('http://x/board' + qs, {method}));
+  is((await (await board('GET')).json()).length, 2, 'a plain read lists the runs and removes nothing');
+  is((await board('POST')).status, 400, 'a POST that asks for nothing in particular is refused');
+  is(rows.length, 2, 'and it left the board alone');
+  is((await (await board('POST', '?name=TEST')).json()).length, 1, 'one rider can be taken off');
+  is(rows[0].name, 'LOK', 'and it is the right one that is left');
+  is((await (await board('POST', '?wipe=1')).json()).length, 0, 'or the whole board can be emptied');
+  is(a.timer, null, 'and none of it started the arena ticking');
+}
+
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
