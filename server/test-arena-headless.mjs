@@ -57,6 +57,23 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   is(laid(a, b.id), 30, 'one barricade cell for each tick the blade was out');
 }
 
+// ---- a tap while the charge sits empty is not saved up for later ----
+// Pressing the blade during the 1s wait used to leave it armed, so the moment a sliver of charge came
+// back it fired for one tick, laid one stray cell, ran dry and started the wait all over again.
+{
+  const a = arena();
+  const {b, say} = rider(a, 'LOK', 2, 2, 'R');
+  say({t: 'blade', on: true});
+  for (let i = 0; i < 32; i++) { if (b.dir === 'R' && b.x >= 37) say({t: 'turn', d: 'D'}); a.step(); }
+  is(a.pack(b)[5], 0, 'the blade has run dry and the charge is waiting at zero');
+  say({t: 'blade', on: true});
+  for (let i = 0; i < 20; i++) { if (b.dir === 'R' && b.x >= 37) say({t: 'turn', d: 'D'}); a.step(); }
+  is(laid(a, b.id), 30, 'a press during the wait lays nothing once the charge comes back');
+  say({t: 'blade', on: true});
+  a.step();
+  assert(b.blade, 'but a press once there is charge again deploys it');
+}
+
 // ---- barricades stand for 8s and then let go ----
 {
   const a = arena();

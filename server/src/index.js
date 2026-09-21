@@ -116,7 +116,7 @@ export class Arena {
       const last = b.queue.length ? b.queue[b.queue.length - 1] : b.dir;
       if (m.d !== last && m.d !== BACK[last] && b.queue.length < 2) b.queue.push(m.d);
     } else if (m.t === 'blade' && b) {
-      b.want = !!m.on;
+      b.want = !!m.on && b.charge > 0;   // a press during the empty wait is dropped, not saved to fire one stray cell later
     }
   }
 

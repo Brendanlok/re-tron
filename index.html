@@ -389,6 +389,8 @@ function paint() {
   $('hTime').textContent = riding ? ((tick - myStart) / 10).toFixed(1) : '0.0';
   $('hKo').textContent = myKos;
   if (b) {
+    // an empty charge means the server has let go of the blade, so the next press must mean "on" again
+    if (b.charge === 0) bladeOn = false;
     $('hChg').textContent = Math.round(b.charge);
     $('chgFill').style.width = b.charge + '%';
     $('chgTile').classList.toggle('empty', b.charge < 12);
