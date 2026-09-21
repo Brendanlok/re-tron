@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>Re-Tron — light cycles, one shared arena</title>
+<title>Re-Tron — Tron, in reverse</title>
 <meta name="description" content="Online light cycles. Your bike leaves nothing behind until you switch on the blade — then it lays a wall that takes out anyone who hits it, you included. The blade runs on charge.">
 <meta name="theme-color" content="#0a0e14">
-<meta property="og:title" content="Re-Tron — light cycles, one shared arena">
+<meta property="og:title" content="Re-Tron — Tron, in reverse">
 <meta property="og:description" content="Your bike leaves nothing behind until you switch on the blade. One shared arena, join any time.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://brendanlok.github.io/re-tron/">
@@ -68,6 +68,7 @@
     color:#eaf2ff;text-shadow:0 0 32px rgba(95,176,255,.5),0 2px 0 rgba(0,0,0,.35);}
   #overlay p{margin:4px 0;color:#9fadc1;font-size:14px;max-width:310px;line-height:1.5;text-shadow:0 1px 6px rgba(6,9,14,.9);}
   #overlay b{color:#e8edf4;}
+  #overlay .tag{margin:-4px 0 8px;color:#ffd25f;font-size:15px;font-weight:700;letter-spacing:.02em;}
   #stats{margin:8px 0 2px;color:#9fadc1;font-size:14px;}
   #stats b{color:#ffd25f;font-size:20px;}
   #nameRow{margin:14px 0 0;}
@@ -106,18 +107,23 @@
   #lb .row.you,#lb .row.you b{color:#57d3ff;}
   #lb .none{color:#67788f;font-size:12px;padding:2px 0;}
   .how{font-size:12px!important;color:#6b7a90!important;margin-top:8px!important;}
-  /* controls: arrow pad on the left, blade on the right, both over the arena (the view follows your bike) */
-  #pad{position:fixed;left:calc(10px + env(safe-area-inset-left,0px));bottom:calc(14px + env(safe-area-inset-bottom,0px));
-    z-index:20;display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,52px);gap:4px;touch-action:none;pointer-events:none;}
-  #pad button{display:flex;align-items:center;justify-content:center;padding:0;pointer-events:auto;
-    color:rgba(230,240,255,.62);background:rgba(120,160,220,.13);border:1px solid rgba(120,160,220,.26);border-radius:14px;cursor:pointer;
-    -webkit-tap-highlight-color:transparent;touch-action:none;}
-  #pad button svg{width:34px;height:34px;fill:currentColor;}
-  #pad button.on{background:rgba(120,160,220,.3);border-color:rgba(132,196,255,.6);color:rgba(240,246,255,.95);}
-  #pad .u{grid-column:2;grid-row:1;} #pad .l{grid-column:1;grid-row:2;}
-  #pad .d{grid-column:2;grid-row:3;} #pad .r{grid-column:3;grid-row:2;}
-  #blade{position:fixed;right:calc(14px + env(safe-area-inset-right,0px));bottom:calc(30px + env(safe-area-inset-bottom,0px));
-    z-index:20;width:104px;height:104px;border-radius:50%;cursor:pointer;font-family:inherit;
+  /* controls: a round thumb pad on the left, blade on the right, centred on the same line so both thumbs
+     rest at one height. The pad is one surface: touch anywhere, and sliding the thumb round it steers
+     without lifting it - the arrows are only there to show which way. */
+  :root{--pad:min(46vw,184px);--bl:min(30vw,118px);}
+  #pad{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));bottom:calc(18px + env(safe-area-inset-bottom,0px));
+    z-index:20;width:var(--pad);height:var(--pad);border-radius:50%;touch-action:none;cursor:pointer;
+    background:radial-gradient(circle,rgba(120,160,220,.16) 0 13%,rgba(120,160,220,.06) 14% 100%);
+    border:1px solid rgba(120,160,220,.24);-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}
+  #pad button{position:absolute;width:34%;height:34%;display:flex;align-items:center;justify-content:center;padding:0;
+    pointer-events:none;color:rgba(230,240,255,.55);background:rgba(120,160,220,.12);border:1px solid rgba(120,160,220,.22);
+    border-radius:50%;}
+  #pad button svg{width:52%;height:52%;fill:currentColor;}
+  #pad button.on{background:rgba(120,160,220,.32);border-color:rgba(132,196,255,.6);color:rgba(240,246,255,.95);}
+  #pad .u{left:33%;top:3%;} #pad .d{left:33%;bottom:3%;} #pad .l{left:3%;top:33%;} #pad .r{right:3%;top:33%;}
+  #blade{position:fixed;right:calc(18px + env(safe-area-inset-right,0px));
+    bottom:calc(18px + (var(--pad) - var(--bl)) / 2 + env(safe-area-inset-bottom,0px));
+    z-index:20;width:var(--bl);height:var(--bl);border-radius:50%;cursor:pointer;font-family:inherit;
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
     color:#ffd25f;background:rgba(255,210,95,.12);border:2px solid rgba(255,210,95,.4);
     -webkit-tap-highlight-color:transparent;touch-action:none;}
@@ -194,8 +200,9 @@
 <button id="blade" hidden><span class="bl">BLADE</span><span class="bs" id="bladeSub">tap to deploy</span></button>
 <div id="hint" hidden></div>
 <div id="overlay">
-  <div class="badge" id="badge">Light cycles &middot; one shared arena</div>
+  <div class="badge" id="badge">Tron, in reverse</div>
   <h1 id="title">RE-TRON</h1>
+  <p class="tag" id="tag">No trail until you draw the blade.</p>
   <p id="msg">Everyone rides in the same arena, and you can join any time. Your bike leaves nothing behind &mdash; <b>until you switch on the blade.</b> Then it lays a wall that takes out anyone who rides into it, you included. The blade runs on charge, so pick your moment.</p>
   <div id="stats" hidden></div>
   <div id="nameRow"><input id="nameIn" maxlength="8" placeholder="your name" autocomplete="off" spellcheck="false" autocapitalize="characters" autocorrect="off" aria-label="Your name, up to 8 letters or numbers"></div>
@@ -371,6 +378,7 @@ function showResult(s, reason, killer) {
   humWas = false; humSet(false);                 // off the bike, so nothing is laying a wall
   if (reason !== 'lost') SFX.mine();
   $('badge').textContent = why;
+  $('tag').hidden = true;   // the twist is for the first look; after a run the result speaks
   $('title').textContent = reason === 'lost' ? 'DISCONNECTED' : 'KNOCKED OUT';
   $('msg').textContent = reason === 'lost' ? 'The arena dropped out. Start to jump back in.'
     : 'The arena keeps going without you. Jump back in.';
@@ -498,10 +506,29 @@ addEventListener('keydown', e => {
   }
   if (e.key === 'Enter' && !$('overlay').hidden && !$('startBtn').disabled) join();
 });
-for (const btn of $('pad').querySelectorAll('button')) {
-  btn.addEventListener('pointerdown', e => { e.preventDefault(); turn(btn.dataset.d); btn.classList.add('on'); });
-  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) btn.addEventListener(ev, () => btn.classList.remove('on'));
+// The pad steers by which quarter of it the thumb is in, so rolling the thumb round turns without a lift.
+// A small dead centre lets a thumb rest there without steering.
+const pad = $('pad');
+let padId = null, padDir = null;
+function padAt(e) {
+  const r = pad.getBoundingClientRect(), dx = e.clientX - r.left - r.width / 2, dy = e.clientY - r.top - r.height / 2;
+  if (Math.hypot(dx, dy) < r.width * 0.12) return;
+  const d = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'R' : 'L') : (dy > 0 ? 'D' : 'U');
+  if (d === padDir) return;
+  padDir = d;
+  for (const btn of pad.children) btn.classList.toggle('on', btn.dataset.d === d);
+  turn(d);
 }
+pad.addEventListener('pointerdown', e => {
+  e.preventDefault(); padId = e.pointerId; padDir = null; padAt(e);
+  try { pad.setPointerCapture(e.pointerId); } catch {}     // keep the thumb's moves even once it slides off the pad
+});
+pad.addEventListener('pointermove', e => { if (e.pointerId === padId) padAt(e); });
+for (const ev of ['pointerup', 'pointercancel']) pad.addEventListener(ev, e => {
+  if (e.pointerId !== padId) return;
+  padId = padDir = null;
+  for (const btn of pad.children) btn.classList.remove('on');
+});
 $('blade').addEventListener('pointerdown', e => { e.preventDefault(); blade(!bladeOn); });
 let swipe = null;
 const cv = $('cv');
@@ -578,44 +605,60 @@ const ANG = {U: -Math.PI / 2, D: Math.PI / 2, L: Math.PI, R: 0};
 const NB = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const WAVE_S = 0.55;   // how long a crash ring takes to race out and die
 
-// A light cycle, not a square. The hull tapers to a white-hot nose and dims towards the tail, so which
-// way a bike is heading reads instantly — from your own bike at full zoom down to a stranger's across
-// the arena on the menu. Wheels only appear when there are pixels enough for them to read as wheels.
+// A light cycle, not a square. The hull is a dart: blunt tail, swept flanks, a needle nose burning white,
+// so which way a bike is heading reads instantly — from your own bike at full zoom down to a stranger's
+// across the arena on the menu. Detail (body, rider, speed streaks) only when there are pixels for it.
 function cycle(x, y, ang, col, cell, blade, isMe) {
   // A Tron Legacy light cycle, seen from above. The machine itself is black; what you see is the light
-  // on it — two long wheel strips in line, the front one longest and burning white, with thin piping
-  // down the flanks. That inversion is the whole look: dark object, bright edges, heavy bloom. The
+  // on it — the edge piping that sweeps to the nose, two wheel strips in line, the front one white. The
   // lights are drawn at every size, the black body and the rider only when there are pixels for them,
   // because zoomed out to the whole arena a cell is a few pixels and a black shape would just vanish.
-  const s = Math.max(cell, 13), hl = s * 0.9, hw = s * 0.19, detail = cell > 15;
+  const s = Math.max(cell, 13), hl = s * 0.92, hw = s * 0.2, detail = cell > 15;
   ctx.save();
   ctx.translate(x, y); ctx.rotate(ang);
+  const hull = () => {                                      // widest just behind the middle, needle at the front
+    ctx.beginPath(); ctx.moveTo(hl, 0);
+    ctx.bezierCurveTo(hl * 0.62, -hw * 0.3, hl * 0.25, -hw * 1.15, -hl * 0.12, -hw * 1.15);
+    ctx.lineTo(-hl * 0.7, -hw * 0.95);
+    ctx.quadraticCurveTo(-hl * 0.9, -hw * 0.88, -hl * 0.9, 0);
+    ctx.quadraticCurveTo(-hl * 0.9, hw * 0.88, -hl * 0.7, hw * 0.95);
+    ctx.lineTo(-hl * 0.12, hw * 1.15);
+    ctx.bezierCurveTo(hl * 0.25, hw * 1.15, hl * 0.62, hw * 0.3, hl, 0);
+    ctx.closePath();
+  };
 
-  if (detail) {                                             // the machine: dark, but a shade off the floor
-    ctx.fillStyle = 'rgba(19,28,42,.96)';                   // so the silhouette reads instead of vanishing
-    ctx.beginPath(); ctx.roundRect(-hl * 0.84, -hw, hl * 1.68, hw * 2, hw * 0.7); ctx.fill();
-    ctx.strokeStyle = 'rgba(2,5,9,.9)'; ctx.lineWidth = Math.max(1, s * 0.03); ctx.stroke();
+  if (detail) {
+    ctx.strokeStyle = rgb(col, .22); ctx.lineWidth = s * 0.035; ctx.lineCap = 'round';
+    for (const off of [-0.55, 0.55]) {                      // speed streaks off the tail
+      ctx.beginPath(); ctx.moveTo(-hl * 0.95, hw * off); ctx.lineTo(-hl * 1.5, hw * off); ctx.stroke();
+    }
   }
+  hull();
+  if (detail) { ctx.fillStyle = 'rgba(19,28,42,.96)'; ctx.fill(); }   // the machine: a shade off the floor
+  ctx.strokeStyle = rgb(col, detail ? .9 : .75); ctx.lineWidth = Math.max(1, s * 0.045);
+  ctx.shadowColor = rgb(col); ctx.shadowBlur = blade ? s * 0.7 : s * 0.35;
+  ctx.stroke();                                             // the piping: the silhouette at every size
+
   const wheel = (cx, len, wid, hot) => {                    // a wheel, edge on: a bar of light
     ctx.fillStyle = hot ? '#ffffff' : rgb(col, .95);
     ctx.shadowColor = hot ? '#ffffff' : rgb(col); ctx.shadowBlur = blade ? s * 0.85 : s * 0.5;
     ctx.beginPath(); ctx.roundRect(cx - len / 2, -wid / 2, len, wid, wid / 2); ctx.fill();
   };
-  wheel(-hl * 0.55, hl * 0.5, hw * 0.8, false);             // rear
-  wheel(hl * 0.55, hl * 0.6, hw * 0.88, true);              // front: longer and white, so heading reads
-  if (detail) {                                             // the light rails down the flanks, between the wheels
-    ctx.fillStyle = rgb(col, .9); ctx.shadowColor = rgb(col); ctx.shadowBlur = s * 0.4;
-    ctx.beginPath(); ctx.roundRect(-hl * 0.32, -hw * 0.88, hl * 0.72, s * 0.035, s * 0.02); ctx.fill();
-    ctx.beginPath(); ctx.roundRect(-hl * 0.32, hw * 0.88 - s * 0.035, hl * 0.72, s * 0.035, s * 0.02); ctx.fill();
-  }
+  wheel(-hl * 0.55, hl * 0.42, hw * 0.8, false);            // rear
+  wheel(hl * 0.36, hl * 0.42, hw * 0.8, false);             // front
+  ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.shadowBlur = s * 0.5;
+  ctx.beginPath(); ctx.moveTo(hl * 1.02, 0);                // the white-hot nose
+  ctx.lineTo(hl * 0.66, -hw * 0.36); ctx.lineTo(hl * 0.66, hw * 0.36); ctx.closePath(); ctx.fill();
   ctx.shadowBlur = 0;
 
   if (detail) {                                             // the rider, lying forward over the machine
     ctx.fillStyle = 'rgba(9,15,24,.96)';
-    ctx.beginPath(); ctx.ellipse(-hl * 0.12, 0, s * 0.19, hw * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-hl * 0.14, 0, s * 0.2, hw * 0.72, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = rgb(col, .7); ctx.lineWidth = Math.max(1, s * 0.03);   // handlebars
+    ctx.beginPath(); ctx.moveTo(hl * 0.12, -hw * 0.62); ctx.lineTo(hl * 0.12, hw * 0.62); ctx.stroke();
     ctx.fillStyle = isMe ? '#dff4ff' : rgb(col, .8);        // helmet
     ctx.shadowColor = isMe ? '#ffffff' : rgb(col); ctx.shadowBlur = s * 0.3;
-    ctx.beginPath(); ctx.ellipse(-hl * 0.02, 0, s * 0.07, hw * 0.36, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-hl * 0.02, 0, s * 0.08, hw * 0.38, 0, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0;
   }
   ctx.restore();
