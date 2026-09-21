@@ -101,6 +101,18 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   assert(why.length === 2 && why.every(r => r === 'head'), 'swapping cells knocks out both riders (' + why + ')');
 }
 
+// ---- two riders who crash into each other's walls on the same tick both get the knockout ----
+// It used to go to whoever the referee happened to write down second, and the board kept that.
+{
+  const a = arena();
+  const {b: one} = rider(a, 'ONE', 10, 10, 'R'), {b: two} = rider(a, 'TWO', 20, 10, 'L');
+  a.lay(10 * 40 + 11, two.id); a.lay(10 * 40 + 19, one.id);   // each one's wall right in front of the other
+  a.step();
+  const ev = events(a);
+  assert(ev.length === 2 && ev.every(e => e[2] === 'wall' && e[5] === 1), 'both are knocked out, each credited with the other (' + ev.map(e => e[2] + ':' + e[5]) + ')');
+  assert(a.runs.length === 2 && a.runs.every(r => r[4] === 1), 'and both runs go on the board with it');
+}
+
 // ---- the edge ----
 {
   const a = arena();

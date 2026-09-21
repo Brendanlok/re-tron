@@ -182,8 +182,6 @@ export class Arena {
     const secs = (this.tick - b.start) / 10, score = Math.floor(secs) + 10 * b.kos;
     this.out.c.push(b.id);
     this.out.e.push([b.id, killer, reason, score, this.tick - b.start, b.kos]);
-    const k = this.bikes.get(killer);
-    if (k) k.kos++;
     if (b.sock) b.sock.bike = null;
     // the referee records the run, so there is no score to forge: the client never sends one
     if (!b.bot && b.name && score > 0)
@@ -281,6 +279,9 @@ export class Arena {
     }
     const doomed = new Set(dead.map(d => d[0]));
     for (const b of live) if (!doomed.has(b)) { b.x = b.nx; b.y = b.ny; }
+    // credit every knockout before anyone is written down: two riders who crash into each other's walls
+    // on the same tick both get the KO, instead of whoever happened to be killed second
+    for (const [, killer] of dead) { const k = this.bikes.get(killer); if (k) k.kos++; }
     for (const [b, killer, reason] of dead) this.kill(b, killer, reason);
 
     const msg = {t: 'k', k: this.tick, b: [...this.bikes.values()].map(b => this.pack(b))};
