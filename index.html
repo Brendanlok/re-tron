@@ -369,7 +369,7 @@ function showResult(s, reason, killer) {
   if (reason !== 'lost') SFX.mine();
   $('badge').textContent = why;
   $('title').textContent = reason === 'lost' ? 'DISCONNECTED' : 'KNOCKED OUT';
-  $('msg').textContent = reason === 'lost' ? 'The arena dropped out. It reconnects on its own.'
+  $('msg').textContent = reason === 'lost' ? 'The arena dropped out. Start to jump back in.'
     : 'The arena keeps going without you. Jump back in.';
   if (s) { $('stats').hidden = false; $('stats').innerHTML = 'Score <b>' + s.score + '</b> &middot; Alive <b>' + s.secs.toFixed(1) + 's</b> &middot; <b>' + s.kos + '</b> KO' + (s.kos === 1 ? '' : 's'); }
   $('startLbl').textContent = 'Start again';

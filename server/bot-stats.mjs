@@ -9,7 +9,7 @@ import {Arena} from './src/index.js';
 const MINUTES = Number(process.argv[2] || 10), TICKS = MINUTES * 600;
 const a = new Arena({storage: {sql: {exec: () => []}}});
 const feed = [];
-a.socks.add({ws: {send: t => feed.push(JSON.parse(t))}, bike: null, count: 0, windowAt: Date.now()});
+a.socks.add({ws: {send: t => feed.push(JSON.parse(t))}, bike: {alive: true}, count: 0, windowAt: Date.now()});
 for (let i = 0; i < TICKS; i++) a.step();
 
 const out = feed.flatMap(m => m.e || []).filter(e => e[2] !== 'left');

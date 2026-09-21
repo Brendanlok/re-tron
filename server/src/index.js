@@ -10,6 +10,7 @@ const FULL = 600;            // charge is kept in sixths of a percent, so 3s of 
 const WALL_TICKS = 80;       // a barricade stands for 8s
 const TARGET = 6;            // bots top the arena up to this many bikes
 const MAX_HUMANS = 12;
+const IDLE_TICKS = 300;     // a socket with no bike on it for 30s gets hung up on (see step)
 const DIRS = {U: [0, -1], D: [0, 1], L: [-1, 0], R: [1, 0]}, BACK = {U: 'D', D: 'U', L: 'R', R: 'L'};
 const DI = {U: 0, D: 1, L: 2, R: 3};
 const BOT_NAMES = ['VOLT', 'NEON', 'ARC', 'FLUX', 'ION', 'GRID', 'PULSE', 'ZAP', 'RAY', 'HEX'];
@@ -87,16 +88,11 @@ export class Arena {
       [...this.sql.exec('SELECT kind, name, body, ua, at FROM notes ORDER BY at DESC LIMIT 200')]);
     const pair = new WebSocketPair(), ws = pair[1];
     ws.accept();
-    const s = {ws, bike: null, count: 0, windowAt: Date.now()};
+    const s = {ws, bike: null, count: 0, windowAt: Date.now(), idle: 0};
     this.socks.add(s);
     ws.addEventListener('message', e => this.onMsg(s, e.data));
-    const bye = () => {
-      if (!this.socks.delete(s)) return;
-      if (s.bike && s.bike.alive) this.kill(s.bike, 0, 'left');
-      if (!this.socks.size) this.stop();
-    };
-    ws.addEventListener('close', bye);
-    ws.addEventListener('error', bye);
+    ws.addEventListener('close', () => this.drop(s));
+    ws.addEventListener('error', () => this.drop(s));
     this.send(s, {t: 'hi', W, H, k: this.tick, wallTicks: WALL_TICKS, tickMs: TICK_MS,
       walls: this.walls.filter(([c, b]) => this.born[c] === b && this.owner[c]).map(([c, b]) => [c, this.owner[c], b]),
       bikes: [...this.bikes.values()].map(b => this.pack(b)), names: [...this.bikes.values()].map(b => [b.id, b.name, b.bot ? 1 : 0])});
@@ -131,6 +127,12 @@ export class Arena {
     if (!s.waiting) b.name = 'RIDER' + b.id;
     b.sock = s; s.bike = b; s.waiting = undefined;
     this.send(s, {t: 'you', id: b.id});
+  }
+
+  drop(s) {
+    if (!this.socks.delete(s)) return;
+    if (s.bike && s.bike.alive) this.kill(s.bike, 0, 'left');
+    if (!this.socks.size) this.stop();
   }
 
   start() { if (!this.timer) this.timer = setInterval(() => this.step(), TICK_MS); }
@@ -230,6 +232,15 @@ export class Arena {
   }
 
   step() {
+    // The page hangs up the moment its rider is knocked out. A socket still here 30s later with no bike
+    // and not waiting for one is a phone that lost signal without saying goodbye (no close ever arrives),
+    // or someone holding the arena open on purpose - either way it would keep this tick, and the bill,
+    // running for nobody. Hang up on it ourselves.
+    for (const s of this.socks) {
+      s.idle = (s.bike && s.bike.alive) || s.waiting !== undefined ? 0 : (s.idle || 0) + 1;
+      if (s.idle > IDLE_TICKS) { try { s.ws.close(1000, 'idle'); } catch (e) {} this.drop(s); }
+    }
+    if (!this.socks.size) return;   // that was the last one: stop() has already reset the arena
     this.tick++;
     // bots top the arena up to TARGET bikes, and step aside one at a time when people join
     const all = [...this.bikes.values()];

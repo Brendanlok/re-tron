@@ -16,7 +16,8 @@ function arena({bots = false} = {}) {
   const a = new Arena({storage: {sql: {exec: (q, ...args) => { if (/^INSERT/.test(q)) runs.push(args); return []; }}}});
   Object.assign(a, {runs, feed});
   // one watcher records the broadcast, however many riders there are, so nothing is counted twice
-  a.socks.add({ws: {send: t => feed.push(JSON.parse(t))}, bike: null, count: 0, windowAt: Date.now()});
+  // its stand-in bike never dies, so the arena's idle hang-up leaves the watcher alone
+  a.socks.add({ws: {send: t => feed.push(JSON.parse(t))}, bike: {alive: true}, count: 0, windowAt: Date.now()});
   if (!bots) { const real = a.spawn.bind(a); a.spawn = (n, bot) => bot ? null : real(n, bot); }
   return a;
 }
@@ -146,6 +147,29 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   is((await post(JSON.stringify({body: 'flood'}))).status, 429, 'a flood is turned away after 30 in a minute');
 
   is(a.timer, null, 'and none of it started the arena ticking, which is what would cost money');
+}
+
+// ---- a socket left with no bike gets hung up on, so nobody can hold the tick open for free ----
+// This is the cost guard: a phone that drops off the network never sends a close, and without this
+// the arena would tick ten times a second for it until Cloudflare noticed.
+{
+  const a = arena();
+  const closed = [];
+  const sock = name => { const s = {ws: {send() {}, close: () => closed.push(name)}, bike: null, count: 0, windowAt: Date.now(), idle: 0}; a.socks.add(s); return s; };
+  const ghost = sock('ghost'), queued = sock('queued');
+  queued.waiting = 'Q'; a.spawn = () => null;   // no room, so this one really is still waiting to ride
+  for (let i = 0; i < 300; i++) a.step();
+  assert(a.socks.has(ghost), 'a bikeless socket is left alone for 30s');
+  a.step();
+  assert(!a.socks.has(ghost) && closed.includes('ghost'), 'and hung up on just after');
+  assert(a.socks.has(queued), 'a socket still waiting for room to ride is never hung up on');
+
+  const b = new (a.constructor)({storage: {sql: {exec: () => []}}});
+  const lone = {ws: {send() {}, close() {}}, bike: null, count: 0, windowAt: Date.now(), idle: 0};
+  b.socks.add(lone); b.start();
+  for (let i = 0; i < 301; i++) b.step();
+  is(b.socks.size, 0, 'when that was the last socket in the arena');
+  is(b.timer, null, 'the tick stops, so the bill stops with it');
 }
 
 // ---- clearing the board ----
