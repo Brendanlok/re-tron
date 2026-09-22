@@ -768,7 +768,7 @@ function draw() {
       ctx.strokeStyle = rgb([255, 255, 255], 0.42); ctx.lineWidth = Math.max(1, cell * 0.1); ctx.stroke();
     }
     cycle(x, y, ANG[k.d], col, cell, k.blade, k.id === me);
-    if (k.id !== me && cell > 16) {
+    if (ws && k.id !== me && cell > 16) {   // the menu's pretend riders are nobody: a real rider's name on the same id would sit on them
       const nm = names.get(k.id);
       if (nm) { ctx.fillStyle = rgb(col, .75); ctx.font = '700 10px -apple-system,Segoe UI,Roboto,sans-serif'; ctx.textAlign = 'center';
         ctx.fillText(nm.n, x, y - cell * 0.75); }
