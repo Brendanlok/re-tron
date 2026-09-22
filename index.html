@@ -166,7 +166,7 @@
   #rot{display:none;position:fixed;z-index:55;align-items:center;justify-content:center;
     top:calc(8px + env(safe-area-inset-top,0px));left:0;right:0;
     color:#e8edf4;text-align:center;pointer-events:none;}
-  @media (pointer:coarse) and (orientation:landscape){ #rot{display:flex;} }
+  @media (pointer:coarse) and (orientation:landscape) and (max-height:500px){ #rot{display:flex;} }   /* phones only: a tablet on its side is as roomy as a laptop */
   #rot .card{padding:10px 18px;border-radius:14px;background:rgba(15,23,36,.94);
     border:1px solid rgba(255,157,138,.34);box-shadow:0 12px 34px rgba(0,0,0,.5);}
   #rot h2{margin:0;font-size:14px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#ff9d8a;}
