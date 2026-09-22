@@ -329,14 +329,16 @@ function onMsg(m) {
     for (const [id, n, bot] of m.n || []) names.set(id, {n, bot});
     const seen = new Set();
     for (const b of m.b) { setBike(b, was); seen.add(b[0]); }
-    for (const id of [...bikes.keys()]) if (!seen.has(id)) bikes.delete(id);
+    // a knocked-out bike is already missing from m.b: keep where it was, or its derez lands in the corner at 0,0
+    const gone = new Map();
+    for (const [id, k] of [...bikes]) if (!seen.has(id)) { gone.set(id, k); bikes.delete(id); }
     const mb = bikes.get(me);
     if (mb && pend[0] === mb.d) pend.shift();   // the server has taken the oldest one
     if (tick - pendAt > 10) pend = [];          // one it never took (a lost race): stop judging against it
     for (const [c, o] of m.a || []) walls.set(c, {o, born: tick});
     for (const id of m.c || []) for (const [c, w] of walls) if (w.o === id) walls.delete(c);
     for (const [c, w] of walls) if (w.born + WALL_TICKS <= tick) walls.delete(c);
-    for (const ev of m.e || []) onOut(ev);
+    for (const ev of m.e || []) onOut(ev, gone.get(ev[0]));
     if (m.top) paintBoard(m.top);
     if (m.on !== undefined) $('live').textContent = m.on + (m.on === 1 ? ' rider' : ' riders') + ' in the arena now';
     paint();
@@ -363,10 +365,9 @@ function drawnAt(k, t) {
   return l2 ? [ox + (k.x - ox) * (d - l1) / l2, oy + (k.y - oy) * (d - l1) / l2] : [ox, oy];
 }
 const drawT = () => Math.min(1, (performance.now() - tickAt) / TICK_MS);   // never past the cell: that is the overshoot a late tick undid
-function onOut([victim, killer, reason, score, ticksAlive, kos]) {
-  const b = bikes.get(victim) || {x: 0, y: 0};
+function onOut([victim, killer, reason, score, ticksAlive, kos], b) {
   if (reason !== 'left') {
-    derez(b.x, b.y, colOf(victim), b.d);
+    if (b) derez(b.x, b.y, colOf(victim), b.d);             // one we never saw ride has nowhere to derez
     if (victim === me) shake = 1;                           // only your own crash hits the camera
   }
   if (killer === me) { myKos++; SFX.ko(); }
