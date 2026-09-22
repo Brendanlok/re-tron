@@ -258,6 +258,8 @@ let waves = [], shake = 0;   // the rings a crash throws off, and the kick your 
 function connect() {
   const sock = ws = new WebSocket(SERVER);
   bikes.clear(); walls.clear();   // the menu's pretend riders go before the real arena arrives
+  // forget last run's bike: until 'you' arrives, a stranger on that old id crashing would end this run
+  me = 0;
   sock.onopen = () => send({t: 'join', name: myName});
   sock.onmessage = e => onMsg(JSON.parse(e.data));
   sock.onclose = () => {
