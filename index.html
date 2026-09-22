@@ -290,9 +290,9 @@ function paintLb() {
   $('lb').hidden = false;
   $('lbToday').classList.toggle('on', lbView === 'today');
   $('lbAll').classList.toggle('on', lbView !== 'today');
-  const rows = lbData[lbView] || [];
+  const rows = lbData[lbView] || [], mine = (names.get(me) || {}).n || myName;   // a blank name box rides as RIDERn
   $('lbRows').innerHTML = rows.length ? rows.map(([n, sc, secs, kos], i) =>
-    '<div class="row' + (n === myName ? ' you' : '') + '"><span class="pl">' + (i + 1) + '</span>' +
+    '<div class="row' + (mine && n === mine ? ' you' : '') + '"><span class="pl">' + (i + 1) + '</span>' +
     '<span class="nm">' + n.replace(/[<&]/g, '') + '</span>' +
     '<span class="sub">' + secs.toFixed(1) + 's · ' + kos + ' KO' + (kos === 1 ? '' : 's') + '</span>' +
     '<b>' + sc + '</b></div>').join('')

@@ -124,7 +124,6 @@ export class Arena {
     if (s.waiting === undefined || (s.bike && s.bike.alive)) return;
     const b = this.spawn(s.waiting, false);
     if (!b) return;
-    if (!s.waiting) b.name = 'RIDER' + b.id;
     b.sock = s; s.bike = b; s.waiting = undefined;
     this.send(s, {t: 'you', id: b.id});
   }
@@ -158,6 +157,7 @@ export class Arena {
       const b = {id: this.nextId++, x, y, dir, queue: [], alive: true, bot, name: name || '', charge: FULL, gap: 0,
         blade: false, want: false, kos: 0, start: this.tick, bladeFor: 0};
       if (bot) b.name = BOT_NAMES[b.id % BOT_NAMES.length];
+      else if (!b.name) b.name = 'RIDER' + b.id;   // before the announcement below, or everyone is told a blank
       this.bikes.set(b.id, b);
       this.out.n.push([b.id, b.name, bot ? 1 : 0]);
       return b;

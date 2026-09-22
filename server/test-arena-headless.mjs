@@ -233,5 +233,16 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   is(a.timer, null, 'and none of it started the arena ticking');
 }
 
+// ---- a rider who leaves the name box empty is announced by the name the board will use ----
+{
+  const a = arena();
+  const s = {ws: {send() {}}, bike: null, count: 0, windowAt: Date.now(), idle: 0};
+  a.socks.add(s);
+  a.onMsg(s, JSON.stringify({t: 'join', name: ''}));
+  a.step();
+  const id = s.bike && s.bike.id, told = a.feed.flatMap(m => m.n || []).find(([i]) => i === id);
+  is(told && told[1], 'RIDER' + id, 'everyone is told the nameless rider is RIDER' + id + ', not a blank');
+}
+
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
