@@ -263,9 +263,13 @@ function connect() {
   sock.onclose = () => {
     if (ws !== sock) return;   // one we already hung up on, on its way out
     ws = null; bikes.clear(); walls.clear();
-    if (riding) { riding = false; showResult(null, 'lost'); } else menuReady();
+    if (riding) { riding = false; showResult(null, 'lost'); }
+    // never got on a bike: no signal, or the server is down. Say so, rather than quietly resetting the button
+    else { menuReady(); $('startSub').textContent = 'could not reach the arena — try again'; }
   };
   sock.onerror = () => sock.close();
+  // a phone on bad signal can sit on "connecting…" for a minute before the browser gives up
+  setTimeout(() => { if (ws === sock && !riding) sock.close(); }, 10000);
 }
 function hangUp() { const w = ws; ws = null; if (w) w.close(); bikes.clear(); walls.clear(); }
 function menuReady() { $('startBtn').disabled = false; $('startSub').textContent = isTouch ? 'tap to start' : 'space or click'; }
