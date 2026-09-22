@@ -407,7 +407,8 @@ function showResult(s, reason, killer) {
   $('title').textContent = reason === 'lost' ? 'DISCONNECTED' : 'KNOCKED OUT';
   $('msg').textContent = reason === 'lost' ? 'The arena dropped out. Start to jump back in.'
     : 'The arena keeps going without you. Jump back in.';
-  if (s) { $('stats').hidden = false; $('stats').innerHTML = 'Score <b>' + s.score + '</b> &middot; Alive <b>' + s.secs.toFixed(1) + 's</b> &middot; <b>' + s.kos + '</b> KO' + (s.kos === 1 ? '' : 's'); }
+  $('stats').hidden = !s;   // a dropped connection has no score: don't leave the last run's up as if it were this one
+  if (s) { $('stats').innerHTML = 'Score <b>' + s.score + '</b> &middot; Alive <b>' + s.secs.toFixed(1) + 's</b> &middot; <b>' + s.kos + '</b> KO' + (s.kos === 1 ? '' : 's'); }
   $('startLbl').textContent = 'Start again';
   if (reason !== 'lost') hangUp();
   armAt = performance.now() + 500;   // you died with your thumb on the blade; don't restart out from under the score
@@ -526,7 +527,8 @@ addEventListener('keydown', e => {
   if (KEYS[e.key]) { e.preventDefault(); turn(KEYS[e.key]); return; }
   if (e.key === ' ') {
     e.preventDefault();
-    if (riding) blade(!bladeOn);
+    // a held space auto-repeats: toggling on every repeat flickered the blade and could crowd turns out of the server's flood guard
+    if (riding) { if (!e.repeat) blade(!bladeOn); }
     // off the bike, space is the way back on - but not on a key still held down from the last run
     else if (!e.repeat && performance.now() > armAt && !$('overlay').hidden && !$('startBtn').disabled) join();
     return;
