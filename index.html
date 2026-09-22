@@ -573,6 +573,7 @@ addEventListener('pointerup', () => { swipe = null; });
 function join() {
   const n = $('nameIn').value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
   $('nameIn').value = n; myName = n;
+  try { localStorage.setItem('retron-name', n); } catch (e) {}
   // let go of the name box: left focused, a phone keeps its keyboard up over the arena and the arrow keys stay in the box
   if (document.activeElement) document.activeElement.blur();
   $('startBtn').disabled = true; $('startSub').textContent = 'connecting…';
@@ -617,6 +618,11 @@ $('saySend').addEventListener('click', () => {
   });
 });
 
+// The name is remembered the same way the sound setting is. The board keeps each rider's best run
+// under their name, so a regular who has to retype it every visit quietly loses their own history —
+// and on a phone, typing it again is exactly the friction that makes everyone ride as RIDERn.
+try { myName = localStorage.getItem('retron-name') || ''; } catch (e) {}
+$('nameIn').value = myName;
 menuReady();
 $('how').textContent = isTouch ? 'arrows steer · BLADE lays the wall' : 'arrow keys or WASD steer · space deploys the blade';
 $('hint').textContent = isTouch ? '' : 'space deploys the blade';
