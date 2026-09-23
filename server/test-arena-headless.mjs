@@ -146,6 +146,32 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   assert([...a.bikes.values()].every(b => b.bot), 'and they are all bots when nobody has joined');
 }
 
+// ---- a bot with the blade out does not ride into the pocket it is sealing ----
+// Half of every knockout in the arena used to be a bot hitting its own blade. The cause: the flood
+// fill that picks a bot's turn read the cell the bot was standing on as open floor, even though the
+// blade was about to lay a barricade on it that same tick - so a dead end still joined to the rest of
+// the arena through the bot itself looked like all the room in the world. Board here (W is 40): the
+// bot sits in the only gap between a five-cell dead end straight ahead and a thirty-cell field to its
+// right. Straight ahead also carries the go-straight bonus, so before the fix it won and the bot
+// walled itself in.
+{
+  const a = arena({bots: true});
+  const b = a.spawn('', true);
+  const rnd = Math.random;
+  Math.random = () => 0.5;                     // no slip, no noise: one board, one answer
+  try {
+    a.owner.fill(-1);                          // every cell a wall, then carve out just this test's board
+    const open = (x, y) => { a.owner[y * 40 + x] = 0; };
+    open(10, 10);                              // where the bot stands
+    for (let y = 5; y <= 9; y++) open(10, y);            // the dead end: 5 cells, reachable only through the bot
+    for (let y = 10; y <= 12; y++) for (let x = 11; x <= 20; x++) open(x, y);   // the open field: 30 cells
+    Object.assign(b, {x: 10, y: 10, dir: 'U', want: true, blade: true, bladeFor: 0});
+    a.think(b);
+    is(b.dir, 'R', 'it turns into the open field instead of the dead end it is closing');
+    is(a.owner[10 * 40 + 10], 0, 'and the board is left exactly as it found it');
+  } finally { Math.random = rnd; }
+}
+
 // ---- hearing about it when something breaks ----
 // The one endpoint a stranger can write to, so everything it accepts is checked here, and so is the
 // thing that would actually cost money: none of it may start the tick.

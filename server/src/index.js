@@ -307,6 +307,12 @@ export class Arena {
   // slip now and then so they can be beaten, and swing the blade out when someone is close.
   think(b) {
     let best = b.dir, bestScore = -Infinity;
+    // With the blade out, the cell the bot is standing on becomes a barricade this very tick. Counting it
+    // as open floor let the flood fill escape a pocket through the gap the bot was in the act of sealing,
+    // so a bot would happily turn into a loop it had already closed: half of all knockouts were bots
+    // riding into their own blade, which scores nobody anything. Block it for the length of the choice.
+    const here = b.y * W + b.x, was = this.owner[here];
+    if (b.want && b.charge > 0) this.owner[here] = b.id;
     for (const d of Object.keys(DIRS)) {
       if (d === BACK[b.dir]) continue;
       const x = b.x + DIRS[d][0], y = b.y + DIRS[d][1];
@@ -316,6 +322,7 @@ export class Arena {
       if (Math.random() < 0.06) s = Math.random() * 200;
       if (s > bestScore) { bestScore = s; best = d; }
     }
+    this.owner[here] = was;
     b.dir = best;
     if (b.bladeFor > 0) { if (--b.bladeFor === 0) b.want = false; return; }
     if (!b.blade && b.charge > FULL * 0.6 && Math.random() < 0.3 &&
