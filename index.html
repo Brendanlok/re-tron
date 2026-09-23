@@ -207,12 +207,12 @@
   <div id="stats" hidden></div>
   <div id="nameRow"><input id="nameIn" maxlength="8" placeholder="your name" autocomplete="off" spellcheck="false" autocapitalize="characters" autocorrect="off" aria-label="Your name, up to 8 letters or numbers"></div>
   <button id="startBtn" disabled><span class="lbl" id="startLbl">Start</span><span class="sub" id="startSub">connecting…</span></button>
+  <p class="how" id="how"></p>
   <p id="live"></p>
   <div id="lb" hidden>
     <div class="tabs"><button id="lbToday" class="on">Today</button><button id="lbAll">All time</button></div>
     <div class="rows" id="lbRows"></div>
   </div>
-  <p class="how" id="how"></p>
   <div id="foot">
     <button id="sndBtn" type="button" aria-pressed="true">Sound: on</button>
     <button id="sayBtn" type="button">Something broken? Tell us</button>
@@ -626,7 +626,12 @@ $('saySend').addEventListener('click', () => {
 try { myName = localStorage.getItem('retron-name') || ''; } catch (e) {}
 $('nameIn').value = myName;
 menuReady();
-$('how').textContent = isTouch ? 'arrows steer · BLADE lays the wall' : 'arrow keys or WASD steer · space deploys the blade';
+// The how-to sits directly under Start, not under the board: on a 375x667 phone the menu is taller than
+// the screen, so anything below the board is off the bottom and a first-time phone player pressed Start
+// having never been told the controls. And the pad stopped being four arrows on 21 Sep - it is one round
+// surface you roll a thumb across, which nobody discovers from the word "arrows".
+$('how').textContent = isTouch ? 'roll your thumb round the pad to steer · BLADE lays the wall'
+  : 'arrow keys or WASD steer · space deploys the blade';
 $('hint').textContent = isTouch ? '' : 'space deploys the blade';
 
 // ---- drawing ------------------------------------------------------------------------------
