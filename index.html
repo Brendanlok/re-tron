@@ -842,6 +842,10 @@ function demoStep() {
 }
 let last = 0;
 function frame(now) {
+  // Ask for the next frame BEFORE drawing this one. Asking afterwards meant one thrown error anywhere
+  // in the drawing stopped the loop for good: inputs and the socket carry on, so the rider keeps riding
+  // — and dying — behind a picture frozen on the last good frame. The crash still gets reported.
+  requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - last) / 1000 || 0); last = now;
   for (const p of parts) {
     p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.94; p.vy *= 0.94;
@@ -852,7 +856,7 @@ function frame(now) {
   waves = waves.filter(w => w.t < WAVE_S);
   shake = Math.max(0, shake - dt * 3.2);
   if (!ws && now - demoAt >= TICK_MS) { demoAt = now; demoStep(); }
-  draw(); requestAnimationFrame(frame);
+  draw();
 }
 fit(); liveCount(); loadTop(); requestAnimationFrame(frame);
 </script>
