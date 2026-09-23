@@ -289,6 +289,14 @@ function liveCount() {
     .then(d => { $('live').textContent = d.on ? d.on + (d.on === 1 ? ' rider' : ' riders') + ' in the arena now' : ''; })
     .catch(() => { $('live').textContent = ''; });
 }
+// The arena fills and empties while you are reading the menu, and this line is the only thing that says
+// whether anyone else is out there — asked once at page load, it was already stale by the time anyone
+// read it. Ask again over the same cheap /count, which never starts the tick. Skipped while riding (the
+// arena reports 'on' over the socket) and while the tab is in the background, so a forgotten tab costs
+// nothing; and asked straight away on coming back to the tab, which is when the number is most stale.
+const menuUp = () => !$('overlay').hidden && document.visibilityState === 'visible';
+setInterval(() => { if (menuUp()) liveCount(); }, 20000);
+document.addEventListener('visibilitychange', () => { if (menuUp()) liveCount(); });
 
 // ---- the board ---------------------------------------------------------------------------
 // The server is the only thing that writes a score, on the tick it knocks you out, so there is
