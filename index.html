@@ -238,7 +238,10 @@
 // Online game: the arena lives on the server (server/src/index.js). This page sends inputs and draws what comes back.
 const SERVER = /github\.io$/.test(location.hostname) ? 'wss://re-tron.chanlokk97.workers.dev/ws' : 'ws://localhost:8787/ws';
 const $ = id => document.getElementById(id);
-const isTouch = matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints > 0 || /[?&]touch/.test(location.search);
+// A touchscreen laptop reports ten touch points AND a mouse. Its primary pointer is fine, so it is a computer:
+// give it the keyboard, not a thumb pad over a desktop-sized arena. No phone reports a fine primary pointer.
+const isTouch = /[?&]touch/.test(location.search) ||
+  ((matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints > 0) && !matchMedia('(pointer:fine)').matches);
 const DIRN = ['U', 'D', 'L', 'R'], BACK = {U: 'D', D: 'U', L: 'R', R: 'L'};
 // The film's two sides: you ride cyan like a program, and the arena fills with Clu's ambers and oranges.
 // The cooler hues further down only turn up once there are more bikes than the warm ones can tell apart.
