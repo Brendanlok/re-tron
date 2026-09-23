@@ -370,7 +370,9 @@ function onOut([victim, killer, reason, score, ticksAlive, kos], b) {
     if (b) derez(b.x, b.y, colOf(victim), b.d);             // one we never saw ride has nowhere to derez
     if (victim === me) shake = 1;                           // only your own crash hits the camera
   }
-  if (killer === me) { myKos++; SFX.ko(); }
+  // killer 0 is "nobody" — an edge, a head-on, your own blade. Until 'you' arrives, me is 0 too, so from
+  // pressing Start to landing on a bike every one of those crashes sounded like a knockout you had scored.
+  if (killer && killer === me) { myKos++; SFX.ko(); }
   if (victim === me) { riding = false; showResult({score, secs: ticksAlive / 10, kos}, reason, killer); }
   else if (reason !== 'left') SFX.theirs();
 }
