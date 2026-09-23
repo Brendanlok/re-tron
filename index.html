@@ -684,13 +684,16 @@ function cycle(x, y, ang, col, cell, blade, isMe) {
   ctx.shadowColor = rgb(col); ctx.shadowBlur = blade ? s * 0.7 : s * 0.35;
   ctx.stroke();                                             // the piping: the silhouette at every size
 
-  const wheel = (cx, len, wid, hot) => {                    // a wheel, edge on: a bar of light
-    ctx.fillStyle = hot ? '#ffffff' : rgb(col, .95);
-    ctx.shadowColor = hot ? '#ffffff' : rgb(col); ctx.shadowBlur = blade ? s * 0.85 : s * 0.5;
-    ctx.beginPath(); ctx.roundRect(cx - len / 2, -wid / 2, len, wid, wid / 2); ctx.fill();
+  // A wheel, edge on: a bar of light. Drawn as a round-capped stroke, which is the same stadium shape
+  // a rounded rect gives — and unlike ctx.roundRect it works on every browser. roundRect only arrived
+  // in Safari 16.4, so on an older iPhone this threw on every frame and no bike was ever drawn.
+  const wheel = (cx, len, wid) => {
+    ctx.strokeStyle = rgb(col, .95); ctx.lineWidth = wid; ctx.lineCap = 'round';
+    ctx.shadowColor = rgb(col); ctx.shadowBlur = blade ? s * 0.85 : s * 0.5;
+    ctx.beginPath(); ctx.moveTo(cx - (len - wid) / 2, 0); ctx.lineTo(cx + (len - wid) / 2, 0); ctx.stroke();
   };
-  wheel(-hl * 0.55, hl * 0.42, hw * 0.8, false);            // rear
-  wheel(hl * 0.36, hl * 0.42, hw * 0.8, false);             // front
+  wheel(-hl * 0.55, hl * 0.42, hw * 0.8);                   // rear
+  wheel(hl * 0.36, hl * 0.42, hw * 0.8);                    // front
   ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.shadowBlur = s * 0.5;
   ctx.beginPath(); ctx.moveTo(hl * 1.02, 0);                // the white-hot nose
   ctx.lineTo(hl * 0.66, -hw * 0.36); ctx.lineTo(hl * 0.66, hw * 0.36); ctx.closePath(); ctx.fill();
