@@ -244,9 +244,12 @@ const isTouch = /[?&]touch/.test(location.search) ||
   ((matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints > 0) && !matchMedia('(pointer:fine)').matches);
 const DIRN = ['U', 'D', 'L', 'R'], BACK = {U: 'D', D: 'U', L: 'R', R: 'L'};
 // The film's two sides: you ride cyan like a program, and the arena fills with Clu's ambers and oranges.
-// The cooler hues further down only turn up once there are more bikes than the warm ones can tell apart.
-const MINE = [87, 211, 255];   // you are always cyan
-const PALETTE = [[255, 158, 58], [255, 108, 40], [255, 206, 92], [255, 84, 64], [150, 200, 255], [190, 140, 255], [120, 235, 200], [110, 240, 255]];
+// Nothing in here is blue. The palette used to end in two blues and colours went by id % length, so a rival
+// whose id happened to land on one rode in your cyan - which happens within seconds of any arena starting,
+// not "once there are more bikes than the warm ones can tell apart" as the old note here claimed. Six hues
+// for six bikes: two rivals sharing amber is nothing, a rival wearing your colour is the one that matters.
+const MINE = [87, 211, 255];   // you are always cyan, and only you
+const PALETTE = [[255, 158, 58], [255, 108, 40], [255, 206, 92], [255, 84, 64], [190, 140, 255], [120, 235, 200]];
 const rgb = (c, a) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (a === undefined ? 1 : a) + ')';
 
 let W = 40, H = 60, WALL_TICKS = 80, TICK_MS = 100;
