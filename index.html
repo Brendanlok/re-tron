@@ -106,6 +106,7 @@
   #lb .row b{font-weight:800;color:#e8edf4;min-width:26px;text-align:right;}
   #lb .row.you,#lb .row.you b{color:#57d3ff;}
   #lb .none{color:#67788f;font-size:12px;padding:2px 0;}
+  #lb .none.rt{cursor:pointer;color:#8fa2ba;}
   .how{font-size:12px!important;color:#6b7a90!important;margin-top:8px!important;}
   /* controls: a round thumb pad on the left, blade on the right, centred on the same line so both thumbs
      rest at one height. The pad is one surface: touch anywhere, and sliding the thumb round it steers
@@ -210,7 +211,7 @@
   <p class="how" id="how"></p>
   <p id="live"></p>
   <div id="lb" hidden>
-    <div class="tabs"><button id="lbToday" class="on">Today</button><button id="lbAll">All time</button></div>
+    <div class="tabs" id="lbTabs"><button id="lbToday" class="on">Today</button><button id="lbAll">All time</button></div>
     <div class="rows" id="lbRows"></div>
   </div>
   <div id="foot">
@@ -295,19 +296,33 @@ function liveCount() {
 // arena reports 'on' over the socket) and while the tab is in the background, so a forgotten tab costs
 // nothing; and asked straight away on coming back to the tab, which is when the number is most stale.
 const menuUp = () => !$('overlay').hidden && document.visibilityState === 'visible';
-setInterval(() => { if (menuUp()) liveCount(); }, 20000);
-document.addEventListener('visibilitychange', () => { if (menuUp()) liveCount(); });
+// a board that failed to load is retried on the same beat — /top never starts the tick, so this is
+// as cheap as the count, and it is asked only while the menu is actually on screen
+const menuPoll = () => { liveCount(); if (!lbData) loadTop(); };
+setInterval(() => { if (menuUp()) menuPoll(); }, 20000);
+document.addEventListener('visibilitychange', () => { if (menuUp()) menuPoll(); });
 
 // ---- the board ---------------------------------------------------------------------------
 // The server is the only thing that writes a score, on the tick it knocks you out, so there is
 // nothing here to forge. Best run per rider, today and all time.
 let lbView = 'today', lbData = null;
 function loadTop() {
-  fetch(http('/top')).then(r => r.json()).then(d => { lbData = d; paintLb(); }).catch(() => {});
+  fetch(http('/top')).then(r => r.ok ? r.json() : Promise.reject()).then(d => { lbData = d; paintLb(); })
+    // This used to swallow the failure, so a cold server or a phone on bad signal left the menu with a
+    // hole where the board goes and nothing to say why. Say it, and let a tap try again.
+    .catch(() => {
+      if (lbData) return;   // already showing a board: keep the one we have rather than blanking it
+      $('lb').hidden = false;
+      $('lbTabs').hidden = true;   // nothing to switch between yet, and dead tabs read as broken
+      $('lbRows').innerHTML = '<div class="none rt">Board didn’t load — tap to try again.</div>';
+    });
 }
+// the same tap retries it, and the menu's own 20s poll picks it up on its own if the player never taps
+$('lbRows').addEventListener('click', () => { if (!lbData) loadTop(); });
 function paintLb() {
   if (!lbData) return;
   $('lb').hidden = false;
+  $('lbTabs').hidden = false;
   $('lbToday').classList.toggle('on', lbView === 'today');
   $('lbAll').classList.toggle('on', lbView !== 'today');
   const rows = lbData[lbView] || [], mine = (names.get(me) || {}).n || myName;   // a blank name box rides as RIDERn
