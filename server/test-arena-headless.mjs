@@ -270,5 +270,19 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   is(told && told[1], 'RIDER' + id, 'everyone is told the nameless rider is RIDER' + id + ', not a blank');
 }
 
+// ---- a rider is told WHERE they were dropped, not just that they are riding ----
+// The page hides the menu the instant 'you' lands. With only an id in it, the page had no bike to point
+// the camera at until the next tick, so every run opened on the whole arena at menu zoom and then snapped.
+{
+  const a = arena();
+  const got = [];
+  const s = {ws: {send: t => got.push(JSON.parse(t))}, bike: null, count: 0, windowAt: Date.now(), idle: 0};
+  a.socks.add(s);
+  a.onMsg(s, JSON.stringify({t: 'join', name: 'LOK'}));
+  const you = got.find(m => m.t === 'you');
+  assert(you && you.b, 'the rider is told where they were dropped, before any tick has run');
+  assert(you && you.b && you.b.join() === a.pack(s.bike).join(), 'and it is the same packed bike the broadcast uses');
+}
+
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);

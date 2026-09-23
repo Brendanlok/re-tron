@@ -125,7 +125,10 @@ export class Arena {
     const b = this.spawn(s.waiting, false);
     if (!b) return;
     b.sock = s; s.bike = b; s.waiting = undefined;
-    this.send(s, {t: 'you', id: b.id});
+    // where, not just who: the page hides the menu the moment this lands, and without a position it
+    // has no bike to put the camera on until the next tick - so the first tenth of a second of every
+    // run was the whole arena at menu zoom, then a hard snap onto a bike that had appeared from nowhere
+    this.send(s, {t: 'you', id: b.id, b: this.pack(b)});
   }
 
   drop(s) {

@@ -345,7 +345,9 @@ function onMsg(m) {
     for (const [id, n, bot] of m.names) names.set(id, {n, bot});
     for (const b of m.bikes) setBike(b);
   } else if (m.t === 'you') {
-    me = m.id; riding = true; myStart = tick; pend = []; myKos = 0; bladeOn = false; paint();
+    me = m.id; riding = true; myStart = tick; pend = []; myKos = 0; bladeOn = false;
+    if (m.b) setBike(m.b);   // the arena says where it dropped you, so the first frame is already your bike
+    paint();
     $('overlay').hidden = true; $('hud').hidden = $('board').hidden = $('hint').hidden = false;
     $('blade').hidden = $('pad').hidden = !isTouch;   // on a computer the space bar is the blade
   } else if (m.t === 'full') {
