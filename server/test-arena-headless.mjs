@@ -142,7 +142,19 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
 {
   const a = arena({bots: true});
   for (let i = 0; i < 60; i++) a.step();
-  is(a.bikes.size, 6, 'bots top the arena up to six bikes');
+  // Bots ride into each other like anyone else, and the top-up only adds one every five ticks, so the
+  // count at any single tick is a coin toss - asking for exactly six here failed about one run in
+  // seventy. Measured over 20,000 ticks: six 98.6% of the time, five 1.3%, four 0.05%, never seven and
+  // never below four. So watch a window and check the shape: it fills to six, never grows past it, and
+  // is never left near-empty while the replacements come back.
+  let max = 0, min = Infinity;
+  for (let i = 0; i < 100; i++) {
+    a.step();
+    max = Math.max(max, a.bikes.size);
+    min = Math.min(min, a.bikes.size);
+  }
+  is(max, 6, 'bots top the arena up to six bikes, and never past six');
+  assert(min >= 3, 'and it is never left near-empty between knockouts (thinnest was ' + min + ')');
   assert([...a.bikes.values()].every(b => b.bot), 'and they are all bots when nobody has joined');
 }
 
@@ -185,16 +197,31 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
 {
   const a = arena({bots: true});
   for (let i = 0; i < 60; i++) a.step();
-  is(a.bikes.size, 6, 'the arena starts as six bots');
+  assert(a.bikes.size >= 5 && [...a.bikes.values()].every(b => b.bot),
+    'the arena starts as a full house of bots');   // a hair short is fine and is checked above
   for (let i = 1; i <= 3; i++) {
     const s = {ws: {send() {}}, bike: null, count: 0, windowAt: Date.now(), idle: 0};
     a.socks.add(s);
     a.onMsg(s, JSON.stringify({t: 'join', name: 'P' + i}));
   }
-  for (let i = 0; i < 20; i++) a.step();
-  const live = [...a.bikes.values()], people = live.filter(b => !b.bot).length;
-  is(live.length, 6, 'the arena is back to six bikes, not nine');
-  is(live.length - people, 6 - people, 'and it is bots that gave way, one for each person riding');
+  // Nothing steers these three and nothing steers the bots, so bikes are knocked out at random all the
+  // way through - "exactly six bikes right now" is a coin toss, and asking for it failed about one run
+  // in thirty. What actually has to hold is the shape of it: the arena comes back down off nine within
+  // a second, never climbs past six again, keeps topping itself back up, and never bumps a person.
+  let settled = -1, grew = 0, refilled = false;
+  for (let i = 0; i < 80; i++) {
+    a.step();
+    if (settled < 0) { if (a.bikes.size <= 6) settled = i; }
+    else if (a.bikes.size > 6) grew++;
+    if (settled >= 0 && a.bikes.size === 6) refilled = true;
+  }
+  assert(settled >= 0 && settled < 10, 'the arena comes back down to six within a second of three people joining (' + settled + ')');
+  is(grew, 0, 'and never grows past six again');
+  assert(refilled, 'bots keep topping it back up to six as bikes are knocked out');
+  const people = new Set(a.feed.flatMap(m => m.n || []).filter(n => !n[2]).map(n => n[0]));
+  is(people.size, 3, 'all three people got a bike, full house of bots or not');
+  is(events(a).filter(([id, , r]) => r === 'left' && people.has(id)).length, 0,
+    'and it is bots that gave way - nobody was ever bumped to make room');
 }
 
 // ---- a bot with the blade out does not ride into the pocket it is sealing ----
