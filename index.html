@@ -462,6 +462,11 @@ function paintBoard(top) {
     '<div class="row' + (bot ? ' bot' : '') + (names.get(me) && n === names.get(me).n ? ' you' : '') + '"><span class="nm">' +
     n.replace(/[<&]/g, '') + '</span><b>' + sc + '</b></div>').join('');
 }
+// Under this, the blade is not worth taking: a tap at 5% laid two cells and then started the full
+// 1s lockout and 6s recharge over again. The charge tile has always turned red under 12, but the
+// button lit up and read 'tap to deploy' from 5 - a 0.4s window where the two halves of the same
+// HUD said opposite things and the one that looked encouraging was wrong. One number for both.
+const LOW = 12;
 function paint() {
   const b = bikes.get(me);
   $('hTime').textContent = riding ? ((tick - myStart) / 10).toFixed(1) : '0.0';
@@ -471,14 +476,14 @@ function paint() {
     if (b.charge === 0) bladeOn = false;
     $('hChg').textContent = Math.round(b.charge);
     $('chgFill').style.width = b.charge + '%';
-    $('chgTile').classList.toggle('empty', b.charge < 12);
+    $('chgTile').classList.toggle('empty', b.charge < LOW);
     $('blade').classList.toggle('on', b.blade);
-    $('blade').classList.toggle('flat', b.charge < 5);
+    $('blade').classList.toggle('flat', b.charge < LOW);
     if (b.blade !== humWas) {
       humWas = b.blade; humSet(b.blade);
       if (b.blade) SFX.bladeUp(); else if (b.charge < 5) SFX.dry(); else SFX.bladeDown();
     }
-    $('bladeSub').textContent = b.blade ? 'riding hot' : b.charge < 5 ? 'recharging' : isTouch ? 'tap to deploy' : 'space';
+    $('bladeSub').textContent = b.blade ? 'riding hot' : b.charge < LOW ? 'recharging' : isTouch ? 'tap to deploy' : 'space';
   }
 }
 
