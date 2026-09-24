@@ -271,8 +271,15 @@ export class Arena {
       if (this.born[c] === born) this.owner[c] = 0;
     }
     // crashes: edge, any barricade (yours too), two bikes into one cell, or two bikes swapping cells
+    // A bike heading off the left or right edge has nx = -1 or W, and ny * W + nx then lands on a real
+    // cell one row away at the far side. Counted as a target, it killed whoever was legitimately riding
+    // into that cell for a head-on with a bike that was already off the board - an unexplainable death,
+    // across the arena, from nothing. Off the board collides with nobody; the edge check has it anyway.
     const target = new Map();
-    for (const b of live) { const k = b.ny * W + b.nx; target.set(k, (target.get(k) || 0) + 1); }
+    for (const b of live) {
+      if (b.nx < 0 || b.ny < 0 || b.nx >= W || b.ny >= H) continue;
+      const k = b.ny * W + b.nx; target.set(k, (target.get(k) || 0) + 1);
+    }
     const dead = [];
     for (const b of live) {
       const k = b.ny * W + b.nx;

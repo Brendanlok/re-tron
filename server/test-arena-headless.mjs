@@ -130,6 +130,32 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   assert(a.runs.length === 2 && a.runs.every(r => r[4] === 1), 'and both runs go on the board with it');
 }
 
+// ---- riding off the side of the arena takes nobody with you ----
+// The cell a bike is moving into is kept as ny * W + nx. A bike heading off the left edge has nx = -1,
+// so that lands on the last column of the row ABOVE - a real cell, right across the arena. Whoever was
+// riding into it was knocked out for a head-on with a bike that had already left the board: a death with
+// nothing on screen to explain it, and the only clue a "head-on crash" against thin air.
+{
+  const a = arena();
+  const {b: off} = rider(a, 'EDGER', 0, 5, 'L');    // nx = -1, ny = 5  ->  the same index as (39, 4)
+  const {b: safe} = rider(a, 'INNOC', 38, 4, 'R');  // legitimately riding into (39, 4)
+  a.step();
+  const ev = events(a);
+  is(ev.length, 1, 'only the rider who left the board is knocked out');
+  assert(ev[0][0] === off.id && ev[0][2] === 'edge', 'and it is filed as the edge, not a head-on');
+  assert(safe.alive && safe.x === 39 && safe.y === 4, 'the rider across the arena carries on (' + safe.x + ',' + safe.y + ')');
+}
+
+// the same wrap the other way: off the right edge lands on the first column of the row BELOW
+{
+  const a = arena();
+  rider(a, 'EDGER', 39, 5, 'R');
+  const {b: safe} = rider(a, 'INNOC', 1, 6, 'L');
+  a.step();
+  is(events(a).length, 1, 'off the right edge is no different');
+  assert(safe.alive, 'and the rider on the far side is left alone');
+}
+
 // ---- the edge ----
 {
   const a = arena();
