@@ -146,6 +146,57 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   assert([...a.bikes.values()].every(b => b.bot), 'and they are all bots when nobody has joined');
 }
 
+// ---- a launch-day surge: the arena seats twelve and turns the thirteenth away ----
+// The cap is the one arena rule a link that does better than expected is guaranteed to hit, and it
+// had no check at all. Three things have to hold or a surge goes wrong for everyone at once: the cap
+// is really a cap, being turned away is SAID rather than left silent on "connecting...", and a seat
+// that frees up is handed to the next rider instead of staying shut.
+{
+  const a = arena();
+  const joiner = name => {
+    const got = [];
+    const s = {ws: {send: t => got.push(JSON.parse(t))}, bike: null, count: 0, windowAt: Date.now(), idle: 0};
+    a.socks.add(s);
+    a.onMsg(s, JSON.stringify({t: 'join', name}));
+    // spawn picks its spot at random and can come up empty on a busy board; the live server retries
+    // every tick, so retry here too rather than letting a random miss read as a broken cap. A rider
+    // who was turned away never gets a waiting flag, so this never papers over the cap itself.
+    for (let i = 0; i < 200 && s.waiting !== undefined; i++) a.trySpawn(s);
+    return {s, said: () => got.map(m => m.t)};
+  };
+  const seated = [];
+  for (let i = 1; i <= 12; i++) seated.push(joiner('P' + i));
+  is(a.bikes.size, 12, 'twelve riders all get a bike');
+  assert(seated.every(j => j.said().includes('you')), 'and every one of them is told where they were dropped');
+
+  const turned = joiner('P13');
+  assert(turned.said().includes('full'), 'the thirteenth is told the arena is full, not left on "connecting"');
+  assert(!turned.s.bike, 'and is given no bike');
+  is(a.bikes.size, 12, 'so the cap holds');
+
+  a.drop(seated[0].s);
+  is(a.bikes.size, 11, 'a rider leaving takes their bike with them');
+  assert(joiner('P14').said().includes('you'), 'and the seat that frees up goes to the next rider');
+}
+
+// ---- bots step aside as people arrive, one at a time ----
+// The promise is "join any time": a full house of bots must not keep a person out, and the arena must
+// settle back to six bikes rather than growing every time someone joins.
+{
+  const a = arena({bots: true});
+  for (let i = 0; i < 60; i++) a.step();
+  is(a.bikes.size, 6, 'the arena starts as six bots');
+  for (let i = 1; i <= 3; i++) {
+    const s = {ws: {send() {}}, bike: null, count: 0, windowAt: Date.now(), idle: 0};
+    a.socks.add(s);
+    a.onMsg(s, JSON.stringify({t: 'join', name: 'P' + i}));
+  }
+  for (let i = 0; i < 20; i++) a.step();
+  const live = [...a.bikes.values()], people = live.filter(b => !b.bot).length;
+  is(live.length, 6, 'the arena is back to six bikes, not nine');
+  is(live.length - people, 6 - people, 'and it is bots that gave way, one for each person riding');
+}
+
 // ---- a bot with the blade out does not ride into the pocket it is sealing ----
 // Half of every knockout in the arena used to be a bot hitting its own blade. The cause: the flood
 // fill that picks a bot's turn read the cell the bot was standing on as open floor, even though the
