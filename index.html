@@ -56,6 +56,14 @@
   #board .row.bot{color:#6b7a90;}
   #board .row.you,#board .row.you b{color:#57d3ff;}
   #board .row b{font-weight:800;color:#e8edf4;}
+  /* On a phone the arena is only about 21 cells across, so this panel is a seven-cell blind spot in the
+     top right - which, with the camera holding the rider 40% down the screen, is the road ahead. A rival's
+     ribbon behind it reads at 28% of nothing, so you ride into a wall you were never shown. Drop the fill
+     and keep three names: the standings are worth a glance mid-run, not a wall across the view. */
+  @media (max-width:560px){
+    #board{background:none;border:none;padding:0 2px;text-shadow:0 1px 3px #000,0 0 9px #000;}
+    #board .row:nth-child(n+5){display:none;}
+  }
   #overlay{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;
     align-items:center;justify-content:flex-start;color:#e8edf4;text-align:center;
     padding:calc(24px + env(safe-area-inset-top,0px)) 24px calc(24px + env(safe-area-inset-bottom,0px));overflow-y:auto;
