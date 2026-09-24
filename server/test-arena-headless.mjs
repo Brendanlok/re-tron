@@ -4,17 +4,33 @@
 // the whole balance of the game gets checked on every run. Everything is read out of the broadcast
 // the riders actually receive, so this checks what players are told, not just the server's own state.
 import {Arena} from './src/index.js';
+import {DatabaseSync} from 'node:sqlite';
 
 let bad = 0;
 const assert = (c, m) => { if (c) console.log('ok   ', m); else { console.log('FAIL ', m); bad++; } };
 const is = (got, want, m) => assert(got === want, m + ' (' + got + (got === want ? '' : ', wanted ' + want) + ')');
 
-// The Durable Object hands the Arena a SQLite handle; a list of rows stands in for it. Reads come
-// back empty, which is fine - top() is only reached through fetch(), which this test never calls.
-function arena({bots = false} = {}) {
+// The Durable Object hands the Arena a SQLite handle. Most checks only need to know that a run was
+// written down, so a list of rows stands in for it and reads come back empty. The board is different:
+// it is a real query, and what a player sees leans on a SQLite rule about which row a bare column is
+// taken from - so arena({board: true}) hands the referee node's own in-memory SQLite instead, and the
+// board checks read back exactly the rows the menu would show.
+function arena({bots = false, board = false} = {}) {
   const runs = [], feed = [];
-  const a = new Arena({storage: {sql: {exec: (q, ...args) => { if (/^INSERT/.test(q)) runs.push(args); return []; }}}});
-  Object.assign(a, {runs, feed});
+  let sql;
+  if (board) {
+    const db = new DatabaseSync(':memory:');
+    sql = {exec: (q, ...args) => {
+      if (/^\s*SELECT/i.test(q)) return db.prepare(q).all(...args);
+      db.prepare(q).run(...args);
+      if (/^\s*INSERT/i.test(q)) runs.push(args);
+      return [];
+    }};
+  } else {
+    sql = {exec: (q, ...args) => { if (/^INSERT/.test(q)) runs.push(args); return []; }};
+  }
+  const a = new Arena({storage: {sql}});
+  Object.assign(a, {runs, feed, sql});
   // one watcher records the broadcast, however many riders there are, so nothing is counted twice
   // its stand-in bike never dies, so the arena's idle hang-up leaves the watcher alone
   a.socks.add({ws: {send: t => feed.push(JSON.parse(t))}, bike: {alive: true}, count: 0, windowAt: Date.now()});
@@ -386,6 +402,93 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   const you = got.find(m => m.t === 'you');
   assert(you && you.b, 'the rider is told where they were dropped, before any tick has run');
   assert(you && you.b && you.b.join() === a.pack(s.bike).join(), 'and it is the same packed bike the broadcast uses');
+}
+
+// ---- the board: the one permanent record the game leaves behind ----
+// Everything else in the arena lasts eight seconds. The board is what a player comes back for and what
+// the game gets judged by on day one, and nothing checked it at all - the stand-in SQL handle the other
+// sections use swallows every write and answers every read with nothing. A wrong board is silent: the
+// runs still happen, the menu still fills, and only the numbers on it are wrong.
+const TODAY = new Date().toISOString().slice(0, 10);
+// one run start to knockout: dropped y0 rows down and riding straight into the bottom edge, so the run
+// lasts exactly (60 - y0) ticks and the score it should earn is arithmetic rather than a guess
+function ride(a, name, y0, kos = 0) {
+  const {b} = rider(a, name, 20, y0, 'D');
+  b.kos = kos;
+  for (let i = 0; i < 70 && b.alive; i++) a.step();
+  return b;
+}
+{
+  const a = arena({board: true});
+  const b = ride(a, 'LOK', 2, 2);
+  assert(!b.alive, 'the run ended');
+  const rows = a.top(null), row = rows[0] || [];
+  is(rows.length, 1, 'the referee writes the run down the moment it ends');
+  is(row[0], 'LOK', 'under the rider who rode it');
+  is(row[1], 25, 'score is a point a second alive plus ten a knockout (5.8s, 2 KOs)');
+  is(row[2], 5.8, 'the seconds are kept to a tenth');
+  is(row[3], 2, 'and so are the knockouts');
+}
+
+// A run worth nothing is not worth a row. There is no way for a player to take one off again, so the
+// board would otherwise silt up with half-second hangups.
+{
+  const a = arena({board: true});
+  ride(a, 'LOK', 55);
+  is(a.top(null).length, 0, 'a run worth nothing never reaches the board');
+}
+
+// Bots ride the same arena and are scored the same way inside it; one of them out-scoring the people
+// on the menu board would be the first thing anyone noticed on day one.
+{
+  const a = arena({board: true, bots: true});
+  const bot = a.spawn('', true);
+  a.spawn = () => null;      // no more bots, and
+  a.think = () => {};        // this one rides where the check puts it rather than where it fancies
+  Object.assign(bot, {x: 20, y: 2, dir: 'D', queue: []});
+  for (let i = 0; i < 70 && bot.alive; i++) a.step();
+  assert(!bot.alive, 'the bot rode into the edge after a run worth five');
+  is(a.top(null).length, 0, 'a bot never lands on the board, however long it rides');
+}
+
+// The board shows each rider's BEST run, so one bad night does not bury a good one - and the row has
+// to be that one run whole. The query takes the seconds and the knockouts from the best row by a SQLite
+// rule about bare columns beside MAX(); if that ever stopped holding, the board would quietly show one
+// run's score next to another run's time and nobody could say why their row looked wrong.
+{
+  const a = arena({board: true});
+  ride(a, 'LOK', 30);        // 3.0s, no knockouts -> 3
+  ride(a, 'LOK', 45, 3);     // 1.5s, 3 knockouts  -> 31, the best
+  ride(a, 'LOK', 2);         // 5.8s, no knockouts -> 5
+  const rows = a.top(null), row = rows[0] || [];
+  is(rows.length, 1, 'three runs under one name leave one row: no rider can fill the board');
+  is(row[1], 31, 'and it is their best run, not their last');
+  is(row[2], 1.5, 'with that same run seconds beside it');
+  is(row[3], 3, 'and that same run knockouts');
+}
+
+// Today and All time are two different boards. Yesterday's runs showing under Today would make the
+// arena look busier than it is; today's run missing from it hides the thing a player just did.
+{
+  const a = arena({board: true});
+  a.sql.exec('INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)', '2026-01-01', 'OLD', 500, 50.0, 0, 1);
+  ride(a, 'LOK', 2);
+  const day = a.top(TODAY), all = a.top(null);
+  is(day.length, 1, 'Today holds only the runs ridden today');
+  is(day[0] && day[0][0], 'LOK', 'which is the rider who rode today');
+  is(all.length, 2, 'All time holds both');
+  is(all[0] && all[0][0], 'OLD', 'best first, whatever day it was ridden');
+}
+
+// ten rows is what the menu has room for, and an unbounded list would only grow with the game
+{
+  const a = arena({board: true});
+  for (let i = 0; i < 14; i++)
+    a.sql.exec('INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)', TODAY, 'R' + i, 100 - i, 10.0, 0, i);
+  const rows = a.top(TODAY);
+  is(rows.length, 10, 'the board stops at ten');
+  is(rows[0][0], 'R0', 'highest score first');
+  is(rows[9][0], 'R9', 'down to the tenth best');
 }
 
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
