@@ -245,7 +245,12 @@
 </div>
 <script>
 // Online game: the arena lives on the server (server/src/index.js). This page sends inputs and draws what comes back.
-const SERVER = /github\.io$/.test(location.hostname) ? 'wss://re-tron.chanlokk97.workers.dev/ws' : 'ws://localhost:8787/ws';
+// Anywhere but a dev machine talks to the live arena. This used to name github.io as the ONE host that
+// gets the real server, which meant the same file uploaded to itch (or opened from disk) silently fell
+// back to localhost and told the player the arena could not be reached — a dead game that looks like an
+// outage. The dev machine is the special case, so it is the one named here.
+const SERVER = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)
+  ? 'ws://localhost:8787/ws' : 'wss://re-tron.chanlokk97.workers.dev/ws';
 const $ = id => document.getElementById(id);
 // A touchscreen laptop reports ten touch points AND a mouse. Its primary pointer is fine, so it is a computer:
 // give it the keyboard, not a thumb pad over a desktop-sized arena. No phone reports a fine primary pointer.

@@ -1,0 +1,23 @@
+Tron light cycles, online, in one shared arena.
+
+Your bike leaves nothing behind — until you switch on the blade. Then it lays a wall of
+light that knocks out anyone who rides into it, you included. You get about three seconds
+of blade per charge and six seconds to get it back, so the whole game is picking the moment.
+
+Everyone rides in the same arena and you can join any time. No rounds, no lobby, no waiting:
+you ride, you get knocked out, you ride straight back in. Bots keep the arena at six bikes
+so it is never empty, and they step aside as real riders arrive.
+
+- Your own wall kills you too.
+- Walls fade after eight seconds, and vanish the moment their owner is knocked out.
+- One point a second alive, ten a knockout. The board keeps Today and All time.
+
+Controls
+- Computer: arrow keys or WASD to steer, space for the blade.
+- Phone: an arrow pad and a BLADE button.
+
+Works in any browser, on a phone or a computer. No sign-in, no ads, no install.
+
+Made by Lok. Third in a small collection of games that run classics backwards — after
+Breakin (a Breakout where you play the bricks) and Snaked (a Snake where every apple makes
+you shorter).
