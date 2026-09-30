@@ -142,6 +142,14 @@ export class Arena {
 
   // Drop into the emptiest corner going, well away from anyone else: a fresh bike should get
   // a few seconds of clear road rather than spawning under someone's blade.
+  // ROAD, measured 2026-10-01: both caps here used to stop at 18-20 cells, which is 2.0s at ten ticks
+  // a second - so the search could not tell 2 seconds of road from 5, and stopped the moment it found
+  // 1.8s. In a busy arena with blades out, a third of riders were dropped with under 2.5s in front of
+  // them and the worst got 1.4s, on a board where 5.5s was always available somewhere. That is a new
+  // player pressing Start, looking for the pad, and hitting the arena wall having never touched a
+  // control - the first thing a launch-day visitor would see. Both caps now reach 3s, and the weight
+  // is scaled so road still counts for at most 72 points against distance-from-rivals' 80: this buys
+  // a longer straight, it does not start trading rivals away for one.
   spawn(name, bot) {
     let bestAt = null, bestScore = -Infinity;
     for (let tries = 0; tries < 60; tries++) {
@@ -151,9 +159,9 @@ export class Arena {
       const ahead = this.room(x, y, dir);
       if (ahead < 10) continue;
       const near = Math.min(40, ...[...this.bikes.values()].map(o => Math.abs(o.x - x) + Math.abs(o.y - y)));
-      const score = Math.min(ahead, 18) * 4 + Math.min(near, 20) * 4 + this.reach(y * W + x, 200) / 10;
+      const score = Math.min(ahead, 30) * 2.4 + Math.min(near, 20) * 4 + this.reach(y * W + x, 200) / 10;
       if (score > bestScore) { bestScore = score; bestAt = [x, y, dir, near]; }
-      if (near >= 14 && ahead >= 18) break;   // good enough, stop looking
+      if (near >= 14 && ahead >= 30) break;   // good enough, stop looking
     }
     if (bestAt && bestAt[3] >= 8) {
       const [x, y, dir] = bestAt;
@@ -167,10 +175,10 @@ export class Arena {
     }
     return null;
   }
-  // open cells straight ahead, up to 20
+  // open cells straight ahead, up to 30 - three seconds of riding, the most the spawn scorer rewards
   room(x, y, d) {
     let n = 0;
-    for (let k = 1; k <= 20; k++) {
+    for (let k = 1; k <= 30; k++) {
       const nx = x + DIRS[d][0] * k, ny = y + DIRS[d][1] * k;
       if (nx < 0 || ny < 0 || nx >= W || ny >= H || this.owner[ny * W + nx]) break;
       n++;

@@ -491,5 +491,37 @@ function ride(a, name, y0, kos = 0) {
   is(rows[9][0], 'R9', 'down to the tenth best');
 }
 
+// Road at the drop. A rider who presses Start and then spends a second working out which way they are
+// pointing must not be dead before they have touched a control - that is the first thing a launch-day
+// visitor sees, and it reads as the game's fault, not theirs. The arena is 60 tall, so five seconds of
+// road is always available somewhere; the rule is that the search actually goes out and finds three.
+// Measured into the crowded board a real arena is, with every bot laying wall.
+{
+  const STEP = {U: [0, -1], D: [0, 1], L: [-1, 0], R: [1, 0]};
+  const road = (a, b) => {   // uncapped, unlike the referee's own room(), which stops once it has enough
+    let n = 0;
+    for (let k = 1; k < 200; k++) {
+      const nx = b.x + STEP[b.dir][0] * k, ny = b.y + STEP[b.dir][1] * k;
+      if (nx < 0 || ny < 0 || nx >= 40 || ny >= 60 || a.owner[ny * 40 + nx]) break;
+      n++;
+    }
+    return n;
+  };
+  let worst = Infinity, thin = 0, nulls = 0;
+  for (let i = 0; i < 120; i++) {
+    const a = arena({bots: true});
+    for (let k = 0; k < 6; k++) { const bot = a.spawn('', true); if (bot) bot.want = true; }   // blades out
+    for (let t = 0; t < 60; t++) a.step();
+    const b = a.spawn('LOK', false);
+    if (!b) { nulls++; continue; }
+    const r = road(a, b);
+    worst = Math.min(worst, r);
+    if (r < 25) thin++;
+  }
+  is(nulls, 0, 'a crowded arena still finds room for everyone who asks (0 turned away)');
+  assert(worst >= 18, 'nobody is dropped with under 1.8s of road in front of them (worst ' + (worst / 10) + 's)');
+  assert(thin <= 12, 'and under a tenth get less than 2.5s (' + thin + ' of 120)');
+}
+
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
