@@ -2,7 +2,7 @@
 # Every check here is one that has silently drifted before - the itch zip went stale twice on
 # 1 Oct without anyone noticing, and the repo rename could have left the preview pointing at a
 # dead /tron/ path. Prose in press/launch-copy.md told you to check these; nothing ran them.
-import hashlib, sys, urllib.request, zipfile
+import datetime, hashlib, re, subprocess, sys, urllib.request, zipfile
 
 LIVE = 'https://brendanlok.github.io/re-tron/'
 ARENA = 'https://re-tron.chanlokk97.workers.dev'
@@ -59,8 +59,40 @@ for p, key in (('/count', 'on'), ('/top', 'all')):
     except Exception as e:
         check('the arena answers %s' % p, False, repr(e))
 
-# ponytail: whether the DEPLOYED worker is current is not checkable without wrangler, so it is not
-# here. Run it by hand in server/: npx.cmd wrangler deploy  (or deployments list to read the date),
-# and compare against: git log -1 --date=iso -- server/src/index.js
+# 5. the deployed arena is the server in this folder. This is the quietest failure of the lot: a
+# stale Worker serves a page that looks perfect and plays by last week's rules, and nothing on the
+# screen says so. Compared by date, not by contents - wrangler knows when it last deployed, git
+# knows when the server last changed - which catches the whole class without needing a build.
+SERVER = ['server/src/index.js', 'server/wrangler.toml']
+
+def sh(*a, **kw):
+    # wrangler prints glyphs Windows' default cp1252 cannot decode, and a failed decode hands back
+    # None instead of the listing - so the encoding is named rather than left to the console's.
+    return subprocess.run(a, capture_output=True, encoding='utf8', errors='replace', timeout=180, **kw)
+
+def when(s):
+    return datetime.datetime.fromisoformat(s.replace('Z', '+00:00'))
+
+try:
+    # Uncommitted server edits can't have been deployed, whatever the dates say.
+    dirty = sh('git', 'status', '--porcelain', '--', *SERVER).stdout.strip()
+    changed = max(sh('git', 'log', '-1', '--format=%cI', '--', f).stdout.strip() for f in SERVER)
+    out = sh('npx.cmd', 'wrangler', 'deployments', 'list', cwd='server').stdout
+    # Deployments sit at the left margin; the versions nested under them are indented.
+    stamps = re.findall(r'^Created:\s+(\S+)', out, re.M)
+    if not stamps:
+        check('the deployed arena is the server in this folder', False,
+              'wrangler would not say - run it by hand in server/: npx.cmd wrangler deployments list')
+    else:
+        live = max(when(x) for x in stamps)
+        check('the deployed arena is the server in this folder',
+              not dirty and live > when(changed),
+              'deployed %s, server last changed %s' % (live.strftime('%Y-%m-%d %H:%M UTC'),
+                  when(changed).astimezone(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC'))
+              + (' - uncommitted: ' + ', '.join(x.strip() for x in dirty.splitlines()) if dirty else '')
+              + ('' if not dirty and live > when(changed) else ' - deploy it: cd server, then npx.cmd wrangler deploy'))
+except Exception as e:
+    check('the deployed arena is the server in this folder', False, repr(e))
+
 print('\n' + ('all good' if not bad else '%d FAILED: %s' % (len(bad), ', '.join(bad))))
 sys.exit(1 if bad else 0)
