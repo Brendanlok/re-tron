@@ -112,7 +112,10 @@ export class Arena {
       // who asked on the same tick through the check at once and the arena ended up busier than the cap
       const humans = [...this.bikes.values()].filter(x => !x.bot).length
         + [...this.socks].filter(x => x !== s && x.waiting !== undefined).length;
-      if (humans >= MAX_HUMANS) return this.send(s, {t: 'full'});
+      // the number the referee actually counted goes with the refusal: the menu's own rider count is
+      // up to 20s old, and a visitor told "arena is full" under a line reading "9 riders in the arena now"
+      // reads a broken page rather than a busy one
+      if (humans >= MAX_HUMANS) return this.send(s, {t: 'full', on: humans});
       const name = String(m.name || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
       s.waiting = name;   // spawn() can say "no room right now"; step() keeps trying
       this.trySpawn(s);

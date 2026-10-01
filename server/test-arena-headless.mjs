@@ -229,6 +229,17 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   assert(!turned.s.bike, 'and is given no bike');
   is(a.bikes.size, 12, 'so the cap holds');
 
+  // The refusal has to carry the number the referee counted, because the menu's own rider count is
+  // asked over /count every 20s and is that stale by the time anyone presses Start. Measured against a
+  // full local arena on 2026-10-01: the page read "11 riders in the arena now" directly above "arena is
+  // full" - it told the player there was room and then refused them, which reads as a broken page on
+  // the one day the link gets a crowd. One message, one number, so both lines on the menu agree.
+  const refusal = [...(() => { const got = []; const s = {ws: {send: t => got.push(JSON.parse(t))}, bike: null,
+    count: 0, windowAt: Date.now(), idle: 0}; a.socks.add(s); a.onMsg(s, JSON.stringify({t: 'join', name: 'P15'}));
+    return got; })()].find(m => m.t === 'full');
+  assert(refusal, 'a fifteenth rider is turned away too');
+  is(refusal.on, 12, 'and the refusal says how many are riding, so the menu cannot contradict it');
+
   a.drop(seated[0].s);
   is(a.bikes.size, 11, 'a rider leaving takes their bike with them');
   assert(joiner('P14').said().includes('you'), 'and the seat that frees up goes to the next rider');

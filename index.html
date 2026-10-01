@@ -368,7 +368,14 @@ function onMsg(m) {
   } else if (m.t === 'full') {
     hangUp();   // turned away: let the arena go rather than sitting on an open socket
     $('startBtn').disabled = false;
-    $('startSub').textContent = 'arena is full — try again';
+    // Runs are short, so a seat comes free in seconds — say so, rather than leaving a bare 'try again'
+    // that reads as a dead end on the one day the link gets a crowd.
+    $('startSub').textContent = 'arena is full — try again in a moment';
+    // and take the rider count from the refusal itself. The menu asks /count every 20s, so the line
+    // directly above this one could be that stale: measured 2026-10-01 against a full arena, it read
+    // '11 riders in the arena now' while the arena was turning people away at twelve, which tells the
+    // player there is room and then refuses them. One message, one number, both lines agree.
+    if (m.on) $('live').textContent = m.on + (m.on === 1 ? ' rider' : ' riders') + ' in the arena now';
   } else if (m.t === 'k') {
     const was = drawT();   // how far along the last step each bike is drawn, before the clock restarts
     tick = m.k; tickAt = performance.now();
