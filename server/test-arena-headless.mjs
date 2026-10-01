@@ -233,6 +233,47 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   assert(joiner('P14').said().includes('you'), 'and the seat that frees up goes to the next rider');
 }
 
+// ---- a surge that all asks on the SAME tick still cannot overshoot the cap ----
+// The check above seats its riders one at a time, so each one's wait for room is over before the next
+// asks. A real link that works turns up a dozen people in the same second, and on a crowded board
+// spawn() legitimately comes up empty for a tick or two while step() retries - so the sockets already
+// let in are riders in all but the bike. Counting only bikes meant every one of them was under the
+// cap when it asked, and the arena quietly ended up busier than the number on it says.
+{
+  const a = arena();
+  const joiner = name => {
+    const got = [];
+    const s = {ws: {send: t => got.push(JSON.parse(t))}, bike: null, count: 0, windowAt: Date.now(), idle: 0};
+    a.socks.add(s);
+    a.onMsg(s, JSON.stringify({t: 'join', name}));
+    for (let i = 0; i < 200 && s.waiting !== undefined; i++) a.trySpawn(s);
+    return {s, said: () => got.map(m => m.t)};
+  };
+  for (let i = 1; i <= 11; i++) joiner('P' + i);
+  is(a.bikes.size, 11, 'eleven riders are seated with one seat left');
+
+  // the board is momentarily too crowded to place anybody - a real state, not a broken spawn
+  const room = a.spawn.bind(a);
+  a.spawn = () => null;
+  const late = [];
+  for (let i = 1; i <= 5; i++) {
+    const got = [];
+    const s = {ws: {send: t => got.push(JSON.parse(t))}, bike: null, count: 0, windowAt: Date.now(), idle: 0};
+    a.socks.add(s);
+    a.onMsg(s, JSON.stringify({t: 'join', name: 'L' + i}));
+    late.push({s, said: () => got.map(m => m.t)});
+  }
+  is(late.filter(j => j.s.waiting !== undefined).length, 1, 'only one of five is let in for the last seat');
+  is(late.filter(j => j.said().includes('full')).length, 4,
+    'and the other four are told the arena is full rather than left waiting for a seat that is taken');
+
+  a.spawn = room;   // room opens up, and step() hands it to whoever is still waiting
+  for (const s of a.socks) a.trySpawn(s);
+  const humans = [...a.bikes.values()].filter(b => !b.bot).length;
+  is(humans, 12, 'so the arena holds at the cap instead of overshooting it');
+  assert(late.filter(j => j.s.bike).length === 1, 'exactly one of the five late riders got a bike');
+}
+
 // ---- bots step aside as people arrive, one at a time ----
 // The promise is "join any time": a full house of bots must not keep a person out, and the arena must
 // settle back to six bikes rather than growing every time someone joins.

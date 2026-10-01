@@ -107,7 +107,11 @@ export class Arena {
     let m; try { m = JSON.parse(raw); } catch (e) { return; }
     const b = s.bike && s.bike.alive ? s.bike : null;
     if (m.t === 'join' && !b) {
-      const humans = [...this.bikes.values()].filter(x => !x.bot).length;
+      // bikes AND the sockets already let in and still waiting for room: on a crowded board spawn()
+      // legitimately comes up empty and step() keeps retrying, so counting bikes alone let everyone
+      // who asked on the same tick through the check at once and the arena ended up busier than the cap
+      const humans = [...this.bikes.values()].filter(x => !x.bot).length
+        + [...this.socks].filter(x => x !== s && x.waiting !== undefined).length;
       if (humans >= MAX_HUMANS) return this.send(s, {t: 'full'});
       const name = String(m.name || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
       s.waiting = name;   // spawn() can say "no room right now"; step() keeps trying
