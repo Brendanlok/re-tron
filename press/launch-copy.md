@@ -9,13 +9,35 @@ Live link: https://brendanlok.github.io/re-tron/
 
 | File | What it is |
 |---|---|
-| `re-tron.zip` | The game for itch's upload box: index.html, manifest, icons, favicon, og.png. No build step, no server files — the arena is a Cloudflare Worker the page talks to over the network. If index.html changes before posting, rebuild it: `git -C <tron folder> archive --format=zip -o press/re-tron.zip HEAD index.html manifest.json favicon.svg icon-192.png icon-512.png icon-maskable-192.png icon-maskable-512.png og.png` |
+| `re-tron.zip` | The game for itch's upload box: index.html, manifest, icons, favicon, og.png. No build step, no server files — the arena is a Cloudflare Worker the page talks to over the network. **Repack it whenever index.html changes**, and always after the Friday freeze, with the command under “Repacking the zip” below — plain `git archive` is not enough. |
 | `re-tron-run.gif` | 6s loop, 460x690, 0.9 MB. The whole arena from above, six bikes, one of them cyan. Bikes ride blank, switch the blade on, lay ribbons, box each other in, and the walls fade. Recorded from the game's own attract loop, not a mock-up. |
-| `itch-cover.png` | 630x500 itch cover in the Breakin/Snaked layout: the arena live behind, RE-TRON and the tagline on a dark band at the foot. |
+| `itch-cover.png` | 1260x1000 itch cover (2x itch's 630x500, same ratio) in the Breakin/Snaked layout: the arena live behind, RE-TRON and the tagline on a dark band at the foot. |
 | `shot-0-menu.png` | The menu at phone width (1000x2080, 2x). Under itch's 2160px limit. |
 | `shot-1-arena-phone.png` | Mid-run on a phone: six bikes, your ribbon curling back under you, one rider heading straight at it. Shows the arrow pad and the BLADE button. |
 | `shot-2-knockout-phone.png` | The moment a rival rides into your wall and derezzes into tumbling cubes. Strongest single image. |
 | `shot-3-arena-wide.png` | 1280x720 on a computer, keyboard HUD. Good for a page header. |
+
+## Repacking the zip
+
+```
+git -C <tron folder> -c core.autocrlf=false archive --format=zip -o press/re-tron.zip HEAD index.html manifest.json favicon.svg icon-192.png icon-512.png icon-maskable-192.png icon-maskable-512.png og.png
+```
+
+`-c core.autocrlf=false` is not optional on Windows. Without it `git archive` rewrites every text
+file in the zip to Windows line endings, so index.html came out 953 bytes bigger than the one that
+is live — the same page, but no longer the same bytes. itch runs it fine either way; the damage is
+to the check below, which is the only thing standing between a stale zip and a page two fixes behind
+the link while both halves talk to the same arena. A check that always reports a difference is a
+check nobody can read, and the zip went stale twice in one day on 1 Oct without anyone noticing.
+
+Then confirm the zip is the page that is live — this must print True twice:
+
+```
+python -c "import zipfile,urllib.request;z=zipfile.ZipFile('press/re-tron.zip');l=urllib.request.urlopen('https://brendanlok.github.io/re-tron/index.html').read();print(z.read('index.html')==open('index.html','rb').read());print(z.read('index.html')==l)"
+```
+
+First line: the zip matches the repo. Second: the repo matches the live page. Both True means the
+file in itch's upload box and the file behind the link are the same game. Last run 1 Oct, both True.
 
 Every image is rendered by the real game code driven frame by frame, not drawn by hand.
 The riders and scores in them are staged; no real player's run is shown.
