@@ -5,6 +5,12 @@ posted.** Announcing the game is Lok's call; this folder only has the pieces rea
 
 Live link: https://brendanlok.github.io/re-tron/
 
+Saturday's regression list runs as one command from the repo root: `python preflight.py`.
+It checks that the live link serves the page in this folder, that the itch zip is that same
+page, that the preview image and every icon still resolve, and that the arena answers the
+menu's two questions - the four things that have gone stale silently before. It does not
+check whether the DEPLOYED worker is current; that one still needs wrangler by hand.
+
 ## Assets in this folder
 
 | File | What it is |
