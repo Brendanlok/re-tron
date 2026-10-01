@@ -685,5 +685,72 @@ function ride(a, name, y0, kos = 0) {
     'and every one of them scores its own seconds and knockouts');
 }
 
+// ---- the camera stays inside the arena, and the phone's camera is left exactly where it was ----
+// Drawing lives only in index.html, so the rule is lifted out of it here. Measured 2026-10-01 on a
+// 1920x1080 computer BEFORE this: 29% of the screen was black nothing in the middle of the board, 50%
+// riding along a wall and 71% in a corner - the arena is 40 cells wide and the 34-cell zoom cap, written
+// for a phone where it never binds, could not stretch it across a 16:9 screen at any camera position.
+// The phone half of this is the part that must not move: the rider is held at 40% down the screen so the
+// pad and the BLADE button never sit on top of him, and that is checked below cell by cell, not asserted.
+{
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const cellExpr = page.match(/Math\.max\(14, Math\.min\(cw \/ W, ch \/ 18\)[^\n]*?ch \/ 26\)\)\)/);
+  const holdExpr = page.match(/\(want, screen, board, top = 0\) =>[\s\S]*?Math\.max\(screen - board, want\)\)/);
+  const hudExpr = page.match(/const HUD_H = (\d+);/);
+  assert(!!cellExpr, 'the page sizes a cell so the board can span the width');
+  assert(!!holdExpr, 'and holds the camera inside the arena');
+  assert(!!hudExpr, 'and knows how much room the HUD needs');
+  const W = 40, H = 60, HUD = hudExpr ? +hudExpr[1] : 0;
+  const cell = cellExpr ? new Function('cw', 'ch', 'W', 'H', 'return ' + cellExpr[0]) : () => 0;
+  const hold = holdExpr ? new Function('return ' + holdExpr[0])() : () => 0;
+  const oldCell = (w, h) => Math.max(14, Math.min(34, Math.min(w / 18, h / 26)));
+
+  // what the page draws, for one bike on one screen: [cell size, left edge, top edge]
+  const shot = (w, h, touch, bx, by) => {
+    const c = cell(w, h, W, H), camX = bx + 0.5, camY = by + 0.5;
+    const wantY = (touch ? h * 0.40 : h / 2) - camY * c;
+    return [c, hold(w / 2 - camX * c, w, W * c), touch ? wantY : hold(wantY, h, H * c, HUD)];
+  };
+  const sweep = (w, h, touch) => {
+    let movedOnAPhone = 0, worstOutside = 0, underHud = 0, offScreen = 0;
+    for (let bx = 0; bx < W; bx++) for (let by = 0; by < H; by++) {
+      const [c, ox, oy] = shot(w, h, touch, bx, by);
+      if (touch) {   // the phone: same zoom, same 40% down the screen, to the pixel
+        const oc = oldCell(w, h);
+        if (Math.abs(c - oc) > 1e-9 || Math.abs(oy - (h * 0.40 - (by + 0.5) * oc)) > 1e-9) movedOnAPhone++;
+      }
+      // screen edges showing nothing but the black outside the arena
+      const out = Math.max(0, ox) + Math.max(0, w - (ox + W * c)) + Math.max(0, oy) + Math.max(0, h - (oy + H * c));
+      worstOutside = Math.max(worstOutside, out);
+      const sx = (bx + 0.5) * c + ox, sy = (by + 0.5) * c + oy;
+      if (sx < 0 || sx > w || sy < 0 || sy > h) offScreen++;
+      if (!touch && sy < HUD) underHud++;      // a rider hidden behind the score readout
+    }
+    return {movedOnAPhone, worstOutside, underHud, offScreen};
+  };
+
+  for (const [w, h] of [[375, 812], [375, 667], [360, 640], [414, 896], [320, 568], [768, 1024]])
+    is(sweep(w, h, true).movedOnAPhone, 0, 'a phone at ' + w + 'x' + h + ' keeps the zoom and the 40% it always had');
+  for (const [w, h] of [[1366, 768], [1920, 1080], [2560, 1440], [1280, 800]]) {
+    const r = sweep(w, h, false);
+    const was = Math.max(...[[0, 0], [20, 0], [0, 30], [39, 59]].map(([bx, by]) => {
+      const c = oldCell(w, h), ox = w / 2 - (bx + 0.5) * c, oy = h / 2 - (by + 0.5) * c;
+      return Math.max(0, ox) + Math.max(0, w - (ox + W * c)) + Math.max(0, oy) + Math.max(0, h - (oy + H * c));
+    }));
+    is(+r.worstOutside.toFixed(6), HUD, 'a computer at ' + w + 'x' + h + ' shows no black past the arena but the '
+      + HUD + 'px the HUD sits in (was up to ' + was.toFixed(0) + 'px)');
+    is(r.underHud, 0, 'and never rides the bike in behind the HUD');
+    is(r.offScreen, 0, 'and never off the screen altogether');
+  }
+  // the menu's whole-arena shot is the one place a board narrower than the screen is drawn: it must come
+  // out centred, exactly where the arithmetic it replaced put it
+  for (const [w, h] of [[375, 812], [1920, 1080]]) {
+    const c = Math.min(w * 0.94 / W, h * 0.82 / H);
+    is(+hold(w / 2 - (W / 2) * c, w, W * c).toFixed(6), +(w / 2 - (W / 2) * c).toFixed(6),
+      'the menu arena is still centred sideways at ' + w + 'x' + h);
+    is(+hold(h / 2 - (H / 2) * c, h, H * c).toFixed(6), +(h / 2 - (H / 2) * c).toFixed(6), 'and up and down');
+  }
+}
+
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);

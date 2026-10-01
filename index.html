@@ -732,6 +732,8 @@ addEventListener('resize', fit);
 const ANG = {U: -Math.PI / 2, D: Math.PI / 2, L: Math.PI, R: 0};
 const NB = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const WAVE_S = 0.55;   // how long a crash ring takes to race out and die
+const HUD_H = 78;      // the alive / knockouts / charge row, measured at 9-73: how far the camera keeps
+                       // the arena's top edge clear of it on a computer (a phone's camera never clamps)
 
 // A light cycle, not a square. The hull is a dart: blunt tail, swept flanks, a needle nose burning white,
 // so which way a bike is heading reads instantly — from your own bike at full zoom down to a stranger's
@@ -798,15 +800,36 @@ function cycle(x, y, ang, col, cell, blade, isMe) {
 function draw() {
   const b = bikes.get(me), t = drawT();
   // following your bike: zoomed in. Watching from the menu: the whole arena.
-  const cell = riding && b ? Math.max(14, Math.min(34, Math.min(cw / 18, ch / 26)))
+  // The 34 cap was written for a phone, where it never binds. On a 16:9 computer the HEIGHT picks the
+  // zoom, so the view came out 46 cells wide on a board 40 wide and the arena could not fill the screen
+  // at any camera position - measured 2026-10-01: 1182px of arena on a 1366px laptop, 1360 on a 1920.
+  // cw / W is the zoom at which the board exactly spans the width; ch / 18 keeps it from zooming so far
+  // in on a short window that there is no road visible ahead. Neither binds on a phone or a tablet.
+  const cell = riding && b ? Math.max(14, Math.min(cw / W, ch / 18), Math.min(34, Math.min(cw / 18, ch / 26)))
     : Math.min(cw * 0.94 / W, ch * 0.82 / H);
   const at = k => drawnAt(k, t);
   let camX = W / 2, camY = H / 2;
   if (riding && b) { const [bx, by] = at(b); camX = bx + 0.5; camY = by + 0.5; }
   // on a phone the controls sit at the foot of the screen, so your bike rides a little above centre
   const sk = shake * shake * cell * 0.5;                    // a short kick, gone almost as soon as it lands
-  const ox = cw / 2 - camX * cell + (Math.random() - 0.5) * sk,
-        oy = (riding && b && isTouch ? ch * 0.40 : ch / 2) - camY * cell + (Math.random() - 0.5) * sk;
+  // The camera stops at the arena's edge instead of riding out past it. Centring on the bike with nothing
+  // holding it back meant that riding along a wall - which is most of this game - spent a third of a phone
+  // screen, and 45% of a laptop's, on black nothing, in the one direction the player needed to see.
+  // A board narrower than the screen is centred, which is what the menu's whole-arena shot already did.
+  // top is how far down the screen the board's top edge may sit: 0 holds it hard against the edge, and on
+  // a computer the HUD is the one thing drawn over the arena, so the board stops just under it rather than
+  // riding a bike along the top wall behind the score readout.
+  const hold = (want, screen, board, top = 0) => board + top <= screen ? (screen - board) / 2
+    : Math.min(top, Math.max(screen - board, want));
+  const ox = hold(cw / 2 - camX * cell, cw, W * cell) + (Math.random() - 0.5) * sk;
+  // Sideways always; up and down only on a computer. On a phone the rider is held at 40% down the screen
+  // precisely so the pad and the BLADE button at the foot of it never sit on top of him - and holding the
+  // camera at the arena's bottom edge would walk him down into them. Measured: at the last row of the
+  // board it puts him 12px off the bottom of a 812px screen, under the pad. The phone's camera is
+  // untouched; what it gains here is the sideways half, which costs it nothing.
+  const wantY = (riding && b && isTouch ? ch * 0.40 : ch / 2) - camY * cell;
+  const oy = (riding && b && isTouch ? wantY : hold(wantY, ch, H * cell, riding && b ? HUD_H : 0))
+    + (Math.random() - 0.5) * sk;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = '#070a10'; ctx.fillRect(0, 0, cw, ch);
   ctx.save(); ctx.translate(ox, oy);
