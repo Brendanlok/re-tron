@@ -640,7 +640,19 @@ cv.addEventListener('pointermove', e => {
 });
 addEventListener('pointerup', () => { swipe = null; });
 function join() {
-  const n = $('nameIn').value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  // The board only keeps A-Z0-9, so anything else in a typed name used to be rubbed out in silence:
+  // an accented name lost letters off the middle of it, and a name in any other script vanished whole,
+  // leaving an empty box and a rider called RIDER7 who could never find himself on the board. Accents
+  // now fold to the plain letter (JOSE, ZOE) so most of them survive, and a name with nothing left to
+  // fold is said out loud rather than wiped. A blank box is still blank on purpose - that rides as RIDERn.
+  const raw = $('nameIn').value;
+  const n = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  if (!n && raw.trim()) {
+    $('startSub').textContent = 'names use letters and numbers';
+    $('nameIn').focus(); $('nameIn').select();
+    return;
+  }
   $('nameIn').value = n; myName = n;
   try { localStorage.setItem('retron-name', n); } catch (e) {}
   // let go of the name box: left focused, a phone keeps its keyboard up over the arena and the arrow keys stay in the box

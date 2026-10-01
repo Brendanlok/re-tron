@@ -5,6 +5,7 @@
 // the riders actually receive, so this checks what players are told, not just the server's own state.
 import {Arena} from './src/index.js';
 import {DatabaseSync} from 'node:sqlite';
+import {readFileSync} from 'node:fs';
 
 let bad = 0;
 const assert = (c, m) => { if (c) console.log('ok   ', m); else { console.log('FAIL ', m); bad++; } };
@@ -429,6 +430,22 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   a.step();
   const id = s.bike && s.bike.id, told = a.feed.flatMap(m => m.n || []).find(([i]) => i === id);
   is(told && told[1], 'RIDER' + id, 'everyone is told the nameless rider is RIDER' + id + ', not a blank');
+}
+
+// ---- a name the board cannot keep is said out loud, not rubbed out in silence ----
+// The page, not the referee, is what a player types into, so the rule lives in index.html - lifted
+// out here so it cannot quietly go back to erasing the box and riding as RIDER7.
+{
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const expr = page.match(/raw\.normalize\('NFD'\)[\s\S]*?\.slice\(0, 8\)/);
+  assert(!!expr, 'the page folds a typed name before it strips it');
+  const clean = expr ? new Function('raw', 'return ' + expr[0]) : () => '';
+  is(clean('José'), 'JOSE', 'an accent rides as the plain letter rather than losing the letter');
+  is(clean('Zoë'), 'ZOE', 'and so does a diaeresis');
+  is(clean('l0k!'), 'L0K', 'punctuation still goes, digits still stay');
+  is(clean('小明'), '', 'a name in another script has nothing the board can keep');
+  assert(/if \(!n && raw\.trim\(\)\)/.test(page),
+    'so the page stops and says so instead of starting a run as RIDERn');
 }
 
 // ---- a rider is told WHERE they were dropped, not just that they are riding ----
