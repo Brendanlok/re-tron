@@ -564,5 +564,98 @@ function ride(a, name, y0, kos = 0) {
   assert(thin <= 12, 'and under a tenth get less than 2.5s (' + thin + ' of 120)');
 }
 
+// ---- ten minutes of a busy arena, with the page watching ----
+// Every check above sets up one situation and looks at it. This one just runs the arena hard for ten
+// simulated minutes - people arriving faster than seats come free, riders steering and swinging the
+// blade, bots filling the gaps - and holds it to the rules on every one of the six thousand ticks.
+// The last pair is the point of it: a desync is silent, and the first anyone hears is a player dying
+// on a wall that was not on their screen. So the broadcast is replayed through the PAGE's own wall
+// bookkeeping, line for line out of index.html, and compared to the referee's cell by cell.
+// Seeded, so a failure here comes back the same way next time.
+{
+  let seed = 20261001;
+  const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  const pick = n => Math.floor(rnd() * n);
+  const realRandom = Math.random;
+  Math.random = rnd;   // where the arena drops riders and how the bots ride, seeded along with everything else
+  const a = arena({bots: true});
+  const STEP = {U: [0, -1], D: [0, 1], L: [-1, 0], R: [1, 0]}, DIRS = ['U', 'D', 'L', 'R'];
+  const page = {walls: new Map(), bikes: new Map()};
+  const socks = new Set();
+  let read = 0, joined = 0, seated = 0, turned = 0, orphan = 0, offBoard = 0, shared = 0,
+      over = 0, wallDiff = 0, bikeDiff = 0, threw = null, peak = 0;
+
+  for (let t = 1; t <= 6000 && !threw; t++) {
+    if (rnd() < 0.4) {
+      let full = false;
+      const s = {ws: {send: m => { if (JSON.parse(m).t === 'full') full = true; }, close() {}},
+        bike: null, count: 0, windowAt: Date.now(), idle: 0};
+      a.socks.add(s); joined++;
+      a.onMsg(s, JSON.stringify({t: 'join', name: 'P' + joined}));
+      if (full) { a.socks.delete(s); turned++; } else { socks.add(s); seated++; }
+    }
+    if (rnd() < 0.01 && socks.size) { const s = [...socks][pick(socks.size)]; a.drop(s); socks.delete(s); }
+    for (const s of socks) {
+      const b = s.bike;
+      if (!b || !b.alive) continue;
+      const free = (d, k) => {
+        for (let i = 1; i <= k; i++) {
+          const x = b.x + STEP[d][0] * i, y = b.y + STEP[d][1] * i;
+          if (x < 0 || y < 0 || x >= 40 || y >= 60 || a.owner[y * 40 + x]) return false;
+        }
+        return true;
+      };
+      if (!free(b.dir, 5)) {
+        const open = DIRS.filter(d => free(d, 6));
+        if (open.length) a.onMsg(s, JSON.stringify({t: 'turn', d: open[pick(open.length)]}));
+      }
+      if (rnd() < 0.08) a.onMsg(s, JSON.stringify({t: 'blade', on: rnd() < 0.6}));
+    }
+    try { a.step(); } catch (e) { threw = e; break; }
+
+    const live = [...a.bikes.values()], ids = new Set(live.map(b => b.id)), cells = new Set();
+    for (const b of live) {
+      if (b.x < 0 || b.y < 0 || b.x >= 40 || b.y >= 60) offBoard++;
+      if (cells.has(b.y * 40 + b.x)) shared++;
+      cells.add(b.y * 40 + b.x);
+    }
+    const humans = live.filter(b => !b.bot).length;
+    peak = Math.max(peak, humans);
+    if (humans > 12) over++;
+    for (let c = 0; c < a.owner.length; c++) if (a.owner[c] && !ids.has(a.owner[c])) { orphan++; break; }
+
+    // index.html, onMsg: lay what arrived, drop a knocked-out rider's walls, then let the old ones go
+    for (; read < a.feed.length; read++) {
+      const m = a.feed[read];
+      if (m.t !== 'k') continue;
+      for (const [c, o] of m.a || []) page.walls.set(c, {o, born: m.k});
+      for (const id of m.c || []) for (const [c, w] of page.walls) if (w.o === id) page.walls.delete(c);
+      for (const [c, w] of page.walls) if (w.born + 80 <= m.k) page.walls.delete(c);
+      page.bikes = new Map((m.b || []).map(b => [b[0], b]));
+    }
+    let n = 0;
+    for (let c = 0; c < a.owner.length; c++) if (a.owner[c]) {
+      n++;
+      const w = page.walls.get(c);
+      if (!w || w.o !== a.owner[c]) wallDiff++;
+    }
+    if (n !== page.walls.size) wallDiff++;
+    if (page.bikes.size !== live.length) bikeDiff++;
+    else for (const b of live) { const p = page.bikes.get(b.id); if (!p || p[1] !== b.x || p[2] !== b.y) { bikeDiff++; break; } }
+  }
+
+  Math.random = realRandom;
+  assert(!threw, 'the arena runs ten minutes under load without throwing' + (threw ? ' (' + threw.message + ')' : ''));
+  is(offBoard, 0, 'no bike is ever left off the board');
+  is(shared, 0, 'and no two bikes ever share a cell');
+  is(over, 0, 'the twelve-rider cap holds on every tick (' + seated + ' seated, ' + turned + ' turned away, peak ' + peak + ')');
+  is(orphan, 0, 'no wall outlives the rider who laid it');
+  is(wallDiff, 0, 'the page and the arena agree on every wall, every tick');
+  is(bikeDiff, 0, 'and on where every bike is');
+  assert(a.runs.length > 50, 'runs were written down throughout (' + a.runs.length + ')');
+  is(a.runs.filter(([, , score, secs, kos]) => score <= 0 || Math.floor(secs) + 10 * kos !== score).length, 0,
+    'and every one of them scores its own seconds and knockouts');
+}
+
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
