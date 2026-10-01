@@ -1,5 +1,23 @@
 // Smoke test for the Re-Tron arena server: two players, blade charge cycle, crashes, leaving.
-const URL_ = process.argv[2] || 'ws://localhost:8787/ws';
+const ARGS = process.argv.slice(2), FORCE = ARGS.includes('--live');
+const URL_ = ARGS.find(a => !a.startsWith('--')) || 'ws://localhost:8787/ws';
+// This is not a read-only check. It rides for several seconds as LOK and again as TWO, and the board
+// asserts below REQUIRE those runs to have been written down - so against the live arena it necessarily
+// plants two junk rows on the all-time board, and only the ADMIN secret can clear them. Two of the four
+// junk rows sitting on the live board right now are LOK and TWO, from exactly this. The README already
+// said not to and that did not hold, so the test refuses instead of asking nicely. Saturday's regression
+// pass is the dangerous one: run it against a local arena, where it proves the same rules for free.
+const LOCAL = /^wss?:\/\/(localhost|127\.0\.0\.1|\[::1\])([:/]|$)/.test(URL_);
+if (!LOCAL && !FORCE) {
+  console.log('refusing to run against ' + URL_);
+  console.log('That is not a local arena, and this test WRITES: it would leave LOK and TWO rows on the');
+  console.log('all-time board that only the ADMIN secret can remove.');
+  console.log('Start a local arena instead - npx wrangler dev in server/ - then:');
+  console.log('  node server/test-arena.mjs ws://localhost:8787/ws');
+  console.log('If you really do mean to write to the live board, pass --live.');
+  process.exit(1);
+}
+if (!LOCAL) console.log('!! LIVE ARENA ' + URL_ + ' - this run will leave LOK and TWO rows on the all-time board.');
 const COUNT_ = URL_.replace(/^ws/, 'http').replace(/\/ws$/, '/count');
 const count = async () => (await fetch(COUNT_)).json();
 const sleep = ms => new Promise(r => setTimeout(r, ms));

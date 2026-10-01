@@ -9,4 +9,4 @@ Your bike leaves nothing behind until you switch on the blade. Then it lays a wa
   - Deploy: `cd server && npx wrangler deploy`
   - Run locally: `cd server && npx wrangler dev` then serve this folder and open it.
   - Check the arena rules: `node server/test-arena-headless.mjs` — no server, no network, deterministic.
-  - Check a running server: `node server/test-arena.mjs` against `wrangler dev` (never the live one: test runs land on the board).
+  - Check a running server: `node server/test-arena.mjs` against `wrangler dev`. It refuses a non-local arena, because it rides as LOK and TWO and asserts both runs are on the board - against the live one it plants two junk rows only the ADMIN secret can clear. `--live` overrides it.
