@@ -74,6 +74,8 @@
   #overlay .badge{font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:#5f86b8;margin-bottom:6px;}
   #overlay h1{font-size:clamp(36px,12vw,50px);margin:0 0 8px;font-weight:800;letter-spacing:.14em;
     color:#eaf2ff;text-shadow:0 0 32px rgba(95,176,255,.5),0 2px 0 rgba(0,0,0,.35);}
+  /* A headline that is one long unbreakable word: see the .long toggle in showResult. */
+  #overlay h1.long{font-size:clamp(26px,8.2vw,38px);letter-spacing:.07em;}
   #overlay p{margin:4px 0;color:#9fadc1;font-size:14px;max-width:310px;line-height:1.5;text-shadow:0 1px 6px rgba(6,9,14,.9);}
   #overlay b{color:#e8edf4;}
   #overlay .tag{margin:-4px 0 8px;color:#ffd25f;font-size:15px;font-weight:700;letter-spacing:.02em;}
@@ -451,10 +453,26 @@ function showResult(s, reason, killer) {
   $('badge').textContent = why;
   $('tag').hidden = true;   // the twist is for the first look; after a run the result speaks
   $('title').textContent = reason === 'lost' ? 'DISCONNECTED' : 'KNOCKED OUT';
+  // DISCONNECTED is one twelve-letter word, and a word cannot wrap: at the headline's size with its wide
+  // letter-spacing it wanted about 410px on a 375px phone, so it bled off BOTH edges and the single word
+  // telling the player what had happened was the one thing they could not read. KNOCKED OUT has a space
+  // and has always wrapped and fitted. Step the headline down when its longest word is too long to fit,
+  // rather than shrinking every title to suit the worst one — the menu's RE-TRON keeps its full size.
+  $('title').classList.toggle('long', /[A-Z0-9]{10,}/.test($('title').textContent));
   $('msg').textContent = reason === 'lost' ? 'The arena dropped out. Start to jump back in.'
     : 'The arena keeps going without you. Jump back in.';
-  $('stats').hidden = !s;   // a dropped connection has no score: don't leave the last run's up as if it were this one
+  // A dropped connection is still a real run: the arena knocks the bike out and the referee writes the
+  // score down exactly as if it had crashed (measured 2026-10-01 — yanked a socket mid-ride and the run
+  // landed on the board). This screen showed nothing at all, so a rider who lost signal was told only
+  // that the arena dropped out, and then found their own name on the board below carrying a number that
+  // had come from nowhere. Don't guess the number — the arena rides on for a moment after the last tick
+  // we heard, so ours would read low and disagree with the board sitting right under it — but do say the
+  // run counted. Under a second with no knockouts scores nothing and is never written down, so say it
+  // only when there was something to record.
+  const counted = reason === 'lost' && Math.floor((tick - myStart) / 10) + 10 * myKos > 0;
+  $('stats').hidden = !s && !counted;
   if (s) { $('stats').innerHTML = 'Score <b>' + s.score + '</b> &middot; Alive <b>' + s.secs.toFixed(1) + 's</b> &middot; <b>' + s.kos + '</b> KO' + (s.kos === 1 ? '' : 's'); }
+  else if (counted) { $('stats').textContent = 'That run still counted — look for your name on the board.'; }
   $('startLbl').textContent = 'Start again';
   if (reason !== 'lost') hangUp();
   armAt = performance.now() + 500;   // you died with your thumb on the blade; don't restart out from under the score
