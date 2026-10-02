@@ -110,5 +110,21 @@ try:
 except Exception as e:
     check('the arena seats a bike and rides it', False, repr(e))
 
+# 7. the arena SHUTS DOWN when the last rider leaves. The only failure on this list that costs money
+# rather than players: the Durable Object bills for wall-clock time whenever it is awake and the arena
+# ticks ten times a second, so one that keeps ticking on an empty board spends the free allowance all
+# night and nothing visible says so - /count answers {"on":0} either way. The headless suite proves
+# drop() -> stop() on the local class, but that cannot see the WIRING: a real socket closing, in the
+# real runtime, reaching drop() at all. This asks the deployed arena, which is the one that spends.
+# It stands down on its own when anyone is riding, so it is safe to leave on the launch-day list.
+try:
+    r = sh('node', 'server/idle-stop.mjs', ARENA.replace('https://', 'wss://'))
+    out = (r.stdout or r.stderr or '').strip().splitlines()
+    said = out[-1] if out else 'the arena stops its clock when the last rider leaves - idle-stop said nothing at all'
+    print(said if said.startswith(('ok ', 'FAIL ')) else 'FAIL ' + said)
+    if r.returncode != 0: bad.append('the arena stops its clock when the last rider leaves')
+except Exception as e:
+    check('the arena stops its clock when the last rider leaves', False, repr(e))
+
 print('\n' + ('all good' if not bad else '%d FAILED: %s' % (len(bad), ', '.join(bad))))
 sys.exit(1 if bad else 0)
