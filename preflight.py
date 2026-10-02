@@ -156,7 +156,13 @@ try:
     left, fatal = board_todo(json.loads(b)['all'], datetime.date.today())
     name = 'the pre-launch test runs are off the board'
     shown = ', '.join('%s %d' % (r[0], r[1]) for r in left)
-    wipe = ' - wipe before announcing: POST %s/board?wipe=1 with the ADMIN key' % ARENA
+    # the key rides in the query string, which is the one thing the old wording left out, and the
+    # reply lists whatever is left - so an empty list is the confirmation and there is no second
+    # command to get wrong at nine on a Sunday morning. One wipe covers both tabs: Today and All
+    # time are the same runs table read two ways, so there is nothing to clear separately.
+    wipe = ('\n     wipe before announcing. One wipe clears Today and All time together, then prints'
+            '\n     what is left - empty means done. In PowerShell, with your own key in place of'
+            '\n     YOURADMINKEY:  irm -Method POST "%s/board?wipe=1&key=YOURADMINKEY"' % ARENA)
     if not left: check(name, True, 'nothing but real runs on it')
     elif fatal: check(name, False, shown + wipe)
     else:

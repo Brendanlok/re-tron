@@ -38,8 +38,14 @@ means the live arena's clock did reset: strong evidence, not a proof.
 The fifteenth is the only one aimed at a job rather than a fault, and it is YOURS: the
 all-time board still carries four runs nobody played (SDF 29, TEST 21, LOK 7, TWO 1), so
 the board a first visitor meets says the record is twenty seconds. Wipe it before you
-announce - `POST https://re-tron.chanlokk97.workers.dev/board?wipe=1` with the ADMIN key,
-or `?name=SDF` to drop one rider. Until Sunday the check prints a TODO line and leaves the
+announce. The key goes in the URL, not a header, so in PowerShell it is one line:
+
+    irm -Method POST "https://re-tron.chanlokk97.workers.dev/board?wipe=1&key=YOURADMINKEY"
+
+That clears Today and All time together - they are the same runs table read two ways, so
+there is nothing to clear separately. The reply lists whatever is left, so an empty list
+is your confirmation and there is no second command to run. Swap `wipe=1` for `name=SDF`
+to drop one rider instead. Until Sunday the check prints a TODO line and leaves the
 run green; from Sunday it FAILS outright, so the list cannot go green on launch morning
 with the junk still up. It matches all four fields rather than the name, because LOK is a
 name a real player may ride under. Both halves are asserted: `python preflight.py
