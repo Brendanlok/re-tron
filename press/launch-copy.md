@@ -47,7 +47,7 @@ requests, and a scratch copy with `stop()` neutered still read as healthy). The 
 logic is asserted both ways instead — `node server/idle-stop.mjs --self-check`. Green here
 means the live arena's clock did reset: strong evidence, not a proof.
 
-The fifteenth is the only one aimed at a job rather than a fault, and it is YOURS: the
+The sixteenth is the only one aimed at a job rather than a fault, and it is YOURS: the
 all-time board still carries four runs nobody played (SDF 29, TEST 21, LOK 7, TWO 1), so
 the board a first visitor meets says the record is twenty seconds. Wipe it before you
 announce. The key goes in the URL, not a header, so in PowerShell it is one line:
@@ -97,7 +97,9 @@ python -c "import zipfile,urllib.request;z=zipfile.ZipFile('press/re-tron.zip');
 ```
 
 First line: the zip matches the repo. Second: the repo matches the live page. Both True means the
-file in itch's upload box and the file behind the link are the same game. Last run 1 Oct, both True.
+file in itch's upload box and the file behind the link are the same game. Last run 2 Oct, both True
+(`python preflight.py` checks the same two things as its first and second lines, so a green run is
+this command already done).
 
 Every image is rendered by the real game code driven frame by frame, not drawn by hand.
 The riders and scores in them are staged; no real player's run is shown.
