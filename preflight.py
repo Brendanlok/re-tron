@@ -28,12 +28,35 @@ def board_todo(rows, today):
     # Matched on all four fields, not on the name: LOK is a name a real player may well ride under.
     return [r for r in rows if list(r) in JUNK], today >= LAUNCH
 
+# The page names its own arena, and nothing on this list ever asked it. Every other check talks to
+# ARENA directly, so a page aimed somewhere else passes all of them and still loads perfectly for the
+# player, who gets "could not reach the arena" under the button and no reason why. That line has been
+# wrong in exactly this way before: it used to name github.io as the one host that gets the real
+# server, which left the itch build and anything opened from disk quietly talking to localhost.
+PROD_WS = re.compile(r"\?\s*'ws://localhost:\d+/ws'\s*:\s*'(wss://[^']+)'")
+
+def page_arena(src):
+    # Matched through the whole ternary rather than grepping for any wss:// in the file, so swapping
+    # the dev and live branches round comes back as nothing found instead of reading as fine.
+    m = PROD_WS.search(src)
+    return m.group(1) if m else None
+
 # runs before the network checks, so proving it costs nothing: python preflight.py --self-check
 if '--self-check' in sys.argv:
     assert board_todo(JUNK, datetime.date(2026, 10, 3)) == (JUNK, False), 'junk before launch day is not fatal'
     assert board_todo(JUNK, LAUNCH) == (JUNK, True), 'junk ON launch day is fatal'
     assert board_todo([['REAL', 40, 30.0, 1]], LAUNCH) == ([], True), 'a real run is not junk'
     assert board_todo([], LAUNCH) == ([], True), 'a clean board is clean'
+    # built with chr(10) so this file carries no escapes of its own: the real SERVER line is
+    # split across two lines in index.html, and the regex has to cross that break.
+    line = ("const SERVER = /^(localhost)$/.test(location.hostname)" + chr(10) +
+            "  ? " + repr("ws://localhost:8787/ws") + " : "
+            + repr("wss://re-tron.chanlokk97.workers.dev/ws") + ";")
+    assert page_arena(line) == 'wss://re-tron.chanlokk97.workers.dev/ws', 'reads the live arena off the page'
+    assert page_arena(line.replace('re-tron.chan', 'retron.chan')) == 'wss://retron.chanlokk97.workers.dev/ws',         'a typo comes back as the typo, so the compare below catches it'
+    assert page_arena("? 'wss://re-tron.chanlokk97.workers.dev/ws' : 'ws://localhost:8787/ws';") is None,         'dev and live branches the wrong way round is not a pass'
+    assert page_arena('const SERVER = "wss://re-tron.chanlokk97.workers.dev/ws";') is None, 'no ternary, no pass'
+    print('ok   page_arena: reads the live branch, and fails on a typo, a swap or a missing ternary')
     print('ok   board_todo: finds the junk, spares a real run, and only turns fatal on launch day')
     sys.exit(0)
 
@@ -66,7 +89,16 @@ try:
 except Exception as e:
     check('the itch zip is that same page', False, repr(e))
 
-# 3. the preview and the icons resolve - a rename leaves these pointing at a 404
+# 3. the page opens that same arena. Every check below talks to ARENA directly, so this is the only
+# one that asks the page which arena IT opens - without it the whole list goes green over a game that
+# cannot reach its server. Read off the repo's index.html, which check 1 has just tied to the live page.
+want = ARENA.replace('https://', 'wss://') + '/ws'
+got = page_arena(here.decode('utf8', 'replace'))
+detail = got or 'no live branch found in the SERVER line'
+if got != want: detail += ' - expected ' + want
+check('the page opens that same arena', got == want, detail)
+
+# 4. the preview and the icons resolve - a rename leaves these pointing at a 404
 for a in ASSETS:
     try:
         st, b = get(LIVE + a)
@@ -74,7 +106,7 @@ for a in ASSETS:
     except Exception as e:
         check('%s is served' % a, False, repr(e))
 
-# 4. the arena answers the menu's two questions, and neither starts the tick
+# 5. the arena answers the menu's two questions, and neither starts the tick
 for p, key in (('/count', 'on'), ('/top', 'all')):
     try:
         st, b = get(ARENA + p)
@@ -82,7 +114,7 @@ for p, key in (('/count', 'on'), ('/top', 'all')):
     except Exception as e:
         check('the arena answers %s' % p, False, repr(e))
 
-# 5. the deployed arena is the server in this folder. This is the quietest failure of the lot: a
+# 6. the deployed arena is the server in this folder. This is the quietest failure of the lot: a
 # stale Worker serves a page that looks perfect and plays by last week's rules, and nothing on the
 # screen says so. Compared by date, not by contents - wrangler knows when it last deployed, git
 # knows when the server last changed - which catches the whole class without needing a build.
@@ -117,7 +149,7 @@ try:
 except Exception as e:
     check('the deployed arena is the server in this folder', False, repr(e))
 
-# 6. the arena does not merely answer - it PLAYS. Checks 4 and 5 are both satisfied by a referee that
+# 7. the arena does not merely answer - it PLAYS. Checks 5 and 6 are both satisfied by a referee that
 # throws on every tick: /count and /top never touch step() (deliberately - it is what keeps an idle menu
 # free), so they serve a cheerful 200 over a dead arena and this whole list reads "all good" while nobody
 # can ride. Proved it on 2 Oct by throwing from step() on a local wrangler dev: /count 200, /top 200 with
@@ -133,7 +165,7 @@ try:
 except Exception as e:
     check('the arena seats a bike and rides it', False, repr(e))
 
-# 7. the arena SHUTS DOWN when the last rider leaves. The only failure on this list that costs money
+# 8. the arena SHUTS DOWN when the last rider leaves. The only failure on this list that costs money
 # rather than players: the Durable Object bills for wall-clock time whenever it is awake and the arena
 # ticks ten times a second, so one that keeps ticking on an empty board spends the free allowance all
 # night and nothing visible says so - /count answers {"on":0} either way. The headless suite proves
@@ -149,7 +181,7 @@ try:
 except Exception as e:
     check('the arena stops its clock when the last rider leaves', False, repr(e))
 
-# 8. the pre-launch test runs are off the all-time board. Cheap and tick-free: /top is the same path
+# 9. the pre-launch test runs are off the all-time board. Cheap and tick-free: /top is the same path
 # the menu already asks, so this adds one read and wakes nothing. See board_todo at the top.
 try:
     st, b = get(ARENA + '/top')

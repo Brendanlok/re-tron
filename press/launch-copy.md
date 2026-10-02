@@ -6,19 +6,31 @@ posted.** Announcing the game is Lok's call; this folder only has the pieces rea
 Live link: https://brendanlok.github.io/re-tron/
 
 Saturday's regression list runs as one command from the repo root: `python preflight.py`.
-Fifteen checks, every one of them something that has gone stale silently before: the live
-link serves the page in this folder, the itch zip is that same page, the preview image and
-every icon still resolve, the arena answers the menu's two questions, the DEPLOYED worker
-is the server in this folder (it reads the last deploy out of wrangler), and the arena
-actually SEATS A BIKE AND RIDES IT. That last one matters most on Sunday morning: the two
-cheap paths the menu uses never touch the tick, so a referee that throws on every tick
-still answers both with a healthy 200 - every other check here would pass over an arena
-nobody can play. It rides for six tenths of a second and never asks for the blade, so it
-lays no wall, can own no knockout, scores 0, and the referee writes nothing down: unlike
-`server/test-arena.mjs`, this one is safe to point at the live arena and does so by default.
-Run it on its own with `node server/live-pulse.mjs`.
+Sixteen checks, every one of them something that has gone stale silently before: the live
+link serves the page in this folder, the itch zip is that same page, THE PAGE OPENS THAT
+SAME ARENA, the preview image and every icon still resolve, the arena answers the menu's
+two questions, the DEPLOYED worker is the server in this folder (it reads the last deploy
+out of wrangler), and the arena actually SEATS A BIKE AND RIDES IT. That last one matters
+most on Sunday morning: the two cheap paths the menu uses never touch the tick, so a
+referee that throws on every tick still answers both with a healthy 200 - every other
+check here would pass over an arena nobody can play. It rides for six tenths of a second
+and never asks for the blade, so it lays no wall, can own no knockout, scores 0, and the
+referee writes nothing down: unlike `server/test-arena.mjs`, this one is safe to point at
+the live arena and does so by default. Run it on its own with
+`node server/live-pulse.mjs`.
 
-The fourteenth watches the BILL rather than the players: it asks the deployed arena whether
+The third is the only one that asks the page itself. Every other check here talks to the
+arena by the address written at the top of `preflight.py`, so none of them would notice a
+page aimed somewhere else: the link would serve, the zip would match, the arena would answer
+and ride, and the whole list would go green over a game that loads perfectly and then says
+"could not reach the arena" to every player. That line in `index.html` has been wrong in
+exactly this way once already - it used to name github.io as the one host that gets the real
+server, which left the itch build and anything opened from disk quietly talking to localhost.
+It reads the live branch out of the page and compares it, so a typo, another rename, or a dev
+session that swapped the two branches and committed it all fail loudly. Asserted all three
+ways with `python preflight.py --self-check`, which runs offline before any network call.
+
+The fifteenth watches the BILL rather than the players: it asks the deployed arena whether
 it stops ticking once the last rider hangs up. The Durable Object is charged for wall-clock
 time whenever it is awake and the arena ticks ten times a second, so one that keeps running
 on an empty board spends the free allowance all night — and nothing visible says so, because
