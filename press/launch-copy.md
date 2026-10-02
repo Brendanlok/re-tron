@@ -6,7 +6,7 @@ posted.** Announcing the game is Lok's call; this folder only has the pieces rea
 Live link: https://brendanlok.github.io/re-tron/
 
 Saturday's regression list runs as one command from the repo root: `python preflight.py`.
-Thirteen checks, every one of them something that has gone stale silently before: the live
+Fourteen checks, every one of them something that has gone stale silently before: the live
 link serves the page in this folder, the itch zip is that same page, the preview image and
 every icon still resolve, the arena answers the menu's two questions, the DEPLOYED worker
 is the server in this folder (it reads the last deploy out of wrangler), and the arena
@@ -16,7 +16,26 @@ still answers both with a healthy 200 - every other check here would pass over a
 nobody can play. It rides for six tenths of a second and never asks for the blade, so it
 lays no wall, can own no knockout, scores 0, and the referee writes nothing down: unlike
 `server/test-arena.mjs`, this one is safe to point at the live arena and does so by default.
-Run it on its own with `node server/live-pulse.mjs`. Green means go.
+Run it on its own with `node server/live-pulse.mjs`.
+
+The fourteenth watches the BILL rather than the players: it asks the deployed arena whether
+it stops ticking once the last rider hangs up. The Durable Object is charged for wall-clock
+time whenever it is awake and the arena ticks ten times a second, so one that keeps running
+on an empty board spends the free allowance all night — and nothing visible says so, because
+`/count` answers `{"on":0}` either way. It rides, reads the clock, hangs up, waits twelve
+seconds with nobody connected, and rides again: a clock back near zero means the arena shut
+down. Measured live on 2 Oct and healthy. It stands down by itself the moment anyone is
+riding — a busy arena is *supposed* to keep ticking — so it will not cry wolf on the one
+morning the link gets a crowd, and it cannot dirty the board either: each bike is let go on
+its first tick and never asks for the blade, so it scores 0. It adds about 25s to the run,
+nearly all of it the two deliberate waits. On its own: `node server/idle-stop.mjs`.
+One honest limit: its failing branch could not be tested end to end, because a local
+`wrangler dev` cannot reproduce a runaway clock (miniflare suspends the isolate between
+requests, and a scratch copy with `stop()` neutered still read as healthy). The verdict
+logic is asserted both ways instead — `node server/idle-stop.mjs --self-check`. Green here
+means the live arena's clock did reset: strong evidence, not a proof.
+
+Green means go.
 
 ## Assets in this folder
 
