@@ -6,10 +6,17 @@ posted.** Announcing the game is Lok's call; this folder only has the pieces rea
 Live link: https://brendanlok.github.io/re-tron/
 
 Saturday's regression list runs as one command from the repo root: `python preflight.py`.
-It checks that the live link serves the page in this folder, that the itch zip is that same
-page, that the preview image and every icon still resolve, and that the arena answers the
-menu's two questions - the four things that have gone stale silently before. It does not
-check whether the DEPLOYED worker is current; that one still needs wrangler by hand.
+Thirteen checks, every one of them something that has gone stale silently before: the live
+link serves the page in this folder, the itch zip is that same page, the preview image and
+every icon still resolve, the arena answers the menu's two questions, the DEPLOYED worker
+is the server in this folder (it reads the last deploy out of wrangler), and the arena
+actually SEATS A BIKE AND RIDES IT. That last one matters most on Sunday morning: the two
+cheap paths the menu uses never touch the tick, so a referee that throws on every tick
+still answers both with a healthy 200 - every other check here would pass over an arena
+nobody can play. It rides for six tenths of a second and never asks for the blade, so it
+lays no wall, can own no knockout, scores 0, and the referee writes nothing down: unlike
+`server/test-arena.mjs`, this one is safe to point at the live arena and does so by default.
+Run it on its own with `node server/live-pulse.mjs`. Green means go.
 
 ## Assets in this folder
 

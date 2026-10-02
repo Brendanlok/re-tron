@@ -94,5 +94,21 @@ try:
 except Exception as e:
     check('the deployed arena is the server in this folder', False, repr(e))
 
+# 6. the arena does not merely answer - it PLAYS. Checks 4 and 5 are both satisfied by a referee that
+# throws on every tick: /count and /top never touch step() (deliberately - it is what keeps an idle menu
+# free), so they serve a cheerful 200 over a dead arena and this whole list reads "all good" while nobody
+# can ride. Proved it on 2 Oct by throwing from step() on a local wrangler dev: /count 200, /top 200 with
+# a full board, and this the only check that noticed. It cannot dirty the board - see live-pulse.mjs.
+try:
+    r = sh('node', 'server/live-pulse.mjs', ARENA.replace('https://', 'wss://'))
+    out = (r.stdout or r.stderr or '').strip().splitlines()
+    said = out[-1] if out else 'the arena seats a bike and rides it - live-pulse said nothing at all'
+    # it prints its own ok/FAIL line in this script's format, so pass it straight through rather than
+    # wrapping it and saying the name of the check twice
+    print(said if said.startswith(('ok ', 'FAIL ')) else 'FAIL ' + said)
+    if r.returncode != 0: bad.append('the arena seats a bike and rides it')
+except Exception as e:
+    check('the arena seats a bike and rides it', False, repr(e))
+
 print('\n' + ('all good' if not bad else '%d FAILED: %s' % (len(bad), ', '.join(bad))))
 sys.exit(1 if bad else 0)
