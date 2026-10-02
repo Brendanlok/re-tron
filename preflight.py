@@ -2,7 +2,7 @@
 # Every check here is one that has silently drifted before - the itch zip went stale twice on
 # 1 Oct without anyone noticing, and the repo rename could have left the preview pointing at a
 # dead /tron/ path. Prose in press/launch-copy.md told you to check these; nothing ran them.
-import datetime, hashlib, re, subprocess, sys, urllib.request, zipfile
+import datetime, hashlib, json, re, subprocess, sys, urllib.request, zipfile
 
 LIVE = 'https://brendanlok.github.io/re-tron/'
 ARENA = 'https://re-tron.chanlokk97.workers.dev'
@@ -13,6 +13,29 @@ bad = []
 def check(name, ok, detail=''):
     print(('ok   ' if ok else 'FAIL ') + name + (' - ' + detail if detail else ''))
     if not ok: bad.append(name)
+
+# The one launch-day job that has only ever been prose: the all-time board a first visitor sees is
+# four runs nobody played, and the best of them says the record is twenty seconds. Written down on
+# 23 Sep, and it has DRIFTED since without anyone noticing - two rows then, four now - which is how
+# a to-do that nothing runs gets forgotten. The wipe needs the ADMIN key, so it stays Lok's to run;
+# this only makes sure he cannot reach Sunday without being told. The verdict is split out so both
+# halves can be asserted, the way idle-stop.mjs is - the live board can only ever show the one half.
+LAUNCH = datetime.date(2026, 10, 4)
+JUNK = [['SDF', 29, 19.6, 1], ['TEST', 21, 21.6, 0], ['LOK', 7, 7.8, 0], ['TWO', 1, 1.4, 0]]
+todo = []
+
+def board_todo(rows, today):
+    # Matched on all four fields, not on the name: LOK is a name a real player may well ride under.
+    return [r for r in rows if list(r) in JUNK], today >= LAUNCH
+
+# runs before the network checks, so proving it costs nothing: python preflight.py --self-check
+if '--self-check' in sys.argv:
+    assert board_todo(JUNK, datetime.date(2026, 10, 3)) == (JUNK, False), 'junk before launch day is not fatal'
+    assert board_todo(JUNK, LAUNCH) == (JUNK, True), 'junk ON launch day is fatal'
+    assert board_todo([['REAL', 40, 30.0, 1]], LAUNCH) == ([], True), 'a real run is not junk'
+    assert board_todo([], LAUNCH) == ([], True), 'a clean board is clean'
+    print('ok   board_todo: finds the junk, spares a real run, and only turns fatal on launch day')
+    sys.exit(0)
 
 # Cloudflare's bot protection sits in front of the arena and turns Python-urllib away with a 403
 # while it serves curl and every browser a 200 (measured 1 Oct; there is no user-agent check
@@ -126,5 +149,22 @@ try:
 except Exception as e:
     check('the arena stops its clock when the last rider leaves', False, repr(e))
 
+# 8. the pre-launch test runs are off the all-time board. Cheap and tick-free: /top is the same path
+# the menu already asks, so this adds one read and wakes nothing. See board_todo at the top.
+try:
+    st, b = get(ARENA + '/top')
+    left, fatal = board_todo(json.loads(b)['all'], datetime.date.today())
+    name = 'the pre-launch test runs are off the board'
+    shown = ', '.join('%s %d' % (r[0], r[1]) for r in left)
+    wipe = ' - wipe before announcing: POST %s/board?wipe=1 with the ADMIN key' % ARENA
+    if not left: check(name, True, 'nothing but real runs on it')
+    elif fatal: check(name, False, shown + wipe)
+    else:
+        print('TODO ' + name + ' - still up: ' + shown + wipe)
+        todo.append(name)
+except Exception as e:
+    check('the pre-launch test runs are off the board', False, repr(e))
+
 print('\n' + ('all good' if not bad else '%d FAILED: %s' % (len(bad), ', '.join(bad))))
+if todo: print('still to do before Sunday: ' + '; '.join(todo))
 sys.exit(1 if bad else 0)

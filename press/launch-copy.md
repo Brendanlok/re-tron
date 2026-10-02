@@ -6,7 +6,7 @@ posted.** Announcing the game is Lok's call; this folder only has the pieces rea
 Live link: https://brendanlok.github.io/re-tron/
 
 Saturday's regression list runs as one command from the repo root: `python preflight.py`.
-Fourteen checks, every one of them something that has gone stale silently before: the live
+Fifteen checks, every one of them something that has gone stale silently before: the live
 link serves the page in this folder, the itch zip is that same page, the preview image and
 every icon still resolve, the arena answers the menu's two questions, the DEPLOYED worker
 is the server in this folder (it reads the last deploy out of wrangler), and the arena
@@ -35,7 +35,17 @@ requests, and a scratch copy with `stop()` neutered still read as healthy). The 
 logic is asserted both ways instead — `node server/idle-stop.mjs --self-check`. Green here
 means the live arena's clock did reset: strong evidence, not a proof.
 
-Green means go.
+The fifteenth is the only one aimed at a job rather than a fault, and it is YOURS: the
+all-time board still carries four runs nobody played (SDF 29, TEST 21, LOK 7, TWO 1), so
+the board a first visitor meets says the record is twenty seconds. Wipe it before you
+announce - `POST https://re-tron.chanlokk97.workers.dev/board?wipe=1` with the ADMIN key,
+or `?name=SDF` to drop one rider. Until Sunday the check prints a TODO line and leaves the
+run green; from Sunday it FAILS outright, so the list cannot go green on launch morning
+with the junk still up. It matches all four fields rather than the name, because LOK is a
+name a real player may ride under. Both halves are asserted: `python preflight.py
+--self-check`.
+
+Green means go - and no TODO line under it.
 
 ## Assets in this folder
 
