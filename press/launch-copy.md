@@ -6,7 +6,7 @@ posted.** Announcing the game is Lok's call; this folder only has the pieces rea
 Live link: https://brendanlok.github.io/re-tron/
 
 Saturday's regression list runs as one command from the repo root: `python preflight.py`.
-Sixteen checks, every one of them something that has gone stale silently before: the live
+Seventeen checks, every one of them something that has gone stale silently before: the live
 link serves the page in this folder, the itch zip is that same page, THE PAGE OPENS THAT
 SAME ARENA, the preview image and every icon still resolve, the arena answers the menu's
 two questions, the DEPLOYED worker is the server in this folder (it reads the last deploy
@@ -47,7 +47,24 @@ requests, and a scratch copy with `stop()` neutered still read as healthy). The 
 logic is asserted both ways instead — `node server/idle-stop.mjs --self-check`. Green here
 means the live arena's clock did reset: strong evidence, not a proof.
 
-The sixteenth is the only one aimed at a job rather than a fault, and it is YOURS: the
+The sixteenth is the only one pointed at a channel that is MEANT to fail quietly: `/say`,
+behind the in-game "Something broken? Tell us" box and behind the page's own crash reports.
+`index.html` fires those through `.catch(() => {})` on purpose, so a dead channel never breaks
+the game on top of being dead, and the Tell-us box admits a failure only to the one player
+typing at that second. If it ever regresses, launch day looks exactly like a launch day on
+which nobody had anything to say, and the inbox you open on Monday is empty for the wrong
+reason. Two halves, because either alone would pass over a broken channel: an empty note must
+come back 400, which proves the route reaches `say()` and its guard runs while writing nothing
+down, and a real note must come back 200, which is the only proof the write still works —
+`say()` answers 200 only after the row has gone in. Measured live on 2 Oct and healthy, and
+both verdicts proved: a healthy pair reads ok, and a channel that answers the guard but cannot
+write reads FAIL. One honest limit: reading the note back needs the ADMIN key and no scheduled
+session holds it, so a green line proves the write was ACCEPTED, not that it is readable —
+which is why `/inbox?key=YOURKEY` is still worth opening by hand on the day and the morning
+after. It leaves one note per run under the name PREFLIGHT saying to ignore it. It never calls
+`start()`, so it cannot wake the tick or touch the board.
+
+The seventeenth is the only one aimed at a job rather than a fault, and it is YOURS: the
 all-time board still carries four runs nobody played (SDF 29, TEST 21, LOK 7, TWO 1), so
 the board a first visitor meets says the record is twenty seconds. Wipe it before you
 announce. The key goes in the URL, not a header, so in PowerShell it is one line:

@@ -2,7 +2,7 @@
 # Every check here is one that has silently drifted before - the itch zip went stale twice on
 # 1 Oct without anyone noticing, and the repo rename could have left the preview pointing at a
 # dead /tron/ path. Prose in press/launch-copy.md told you to check these; nothing ran them.
-import datetime, hashlib, json, re, subprocess, sys, urllib.request, zipfile
+import datetime, hashlib, json, re, subprocess, sys, urllib.error, urllib.request, zipfile
 
 LIVE = 'https://brendanlok.github.io/re-tron/'
 ARENA = 'https://re-tron.chanlokk97.workers.dev'
@@ -181,7 +181,38 @@ try:
 except Exception as e:
     check('the arena stops its clock when the last rider leaves', False, repr(e))
 
-# 9. the pre-launch test runs are off the all-time board. Cheap and tick-free: /top is the same path
+# 9. player reports still get through. This is the one path on the game that is DESIGNED to fail
+# quietly: index.html fires its crash reports through .catch(() => {}) on purpose, so a dead channel
+# never breaks the game on top of being dead, and the in-game "Something broken? Tell us" box admits
+# a failure only to the one player typing at that second. So a regression here looks EXACTLY like a
+# launch day on which nobody had anything to say, and Monday's inbox is empty for the wrong reason.
+# Two halves, because either alone goes green over a broken channel. An EMPTY note must come back
+# 400: that proves the route reaches say() and its guard runs, while writing nothing down. A REAL
+# note must come back 200, which is the only way to prove the INSERT still works - say() answers
+# 200 only after the row has gone in. Honest limit: reading the note back needs the ADMIN key and
+# no scheduled session holds it, so this proves the write was ACCEPTED, not that it is readable.
+# Safe on the day: say() never calls start(), so it cannot wake the tick or touch the board.
+def post_say(body):
+    # a 400 arrives as an HTTPError rather than a status, and a refusal is half of what we want here
+    req = urllib.request.Request(ARENA + '/say', method='POST',
+        data=json.dumps({'name': 'PREFLIGHT', 'body': body}).encode(),
+        headers=dict(UA, **{'content-type': 'application/json'}))
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r: return r.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+try:
+    empty = post_say('   ')
+    real = post_say('preflight check, ignore - the launch checklist proving reports still arrive')
+    check('player reports still get through', (empty, real) == (400, 200),
+          'an empty note %d, a real one %d' % (empty, real)
+          + ('' if (empty, real) == (400, 200) else
+             ' - wanted 400 then 200. Nothing on the page will ever tell you this is broken'))
+except Exception as e:
+    check('player reports still get through', False, repr(e))
+
+# 10. the pre-launch test runs are off the all-time board. Cheap and tick-free: /top is the same path
 # the menu already asks, so this adds one read and wakes nothing. See board_todo at the top.
 try:
     st, b = get(ARENA + '/top')
