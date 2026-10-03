@@ -82,6 +82,16 @@ name a real player may ride under. Both halves are asserted: `python preflight.p
 
 Green means go - and no TODO line under it.
 
+On launch morning expect the FIRST run to end red, because that seventeenth check is a job
+and you have not done it yet. It says so in words rather than leaving you to work it out
+from a count: the last line reads `NOT YET - every check of the game itself passed. The one
+thing left is a JOB, not a fault`, followed by the wipe line again. A plain `1 FAILED` over
+a healthy arena is the wrong thing to read two minutes before announcing, which is the only
+reason the wording exists. Wipe, run it once more, and the last line becomes `all good`.
+Anything else red - or a real fault sitting alongside the board - still reads `N FAILED`
+with the names, and a board it could not even READ reads as a fault too, not as the job.
+All four verdicts are asserted offline by `python preflight.py --self-check`.
+
 ## Assets in this folder
 
 | File | What it is |

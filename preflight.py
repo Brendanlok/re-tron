@@ -22,7 +22,22 @@ def check(name, ok, detail=''):
 # halves can be asserted, the way idle-stop.mjs is - the live board can only ever show the one half.
 LAUNCH = datetime.date(2026, 10, 4)
 JUNK = [['SDF', 29, 19.6, 1], ['TEST', 21, 21.6, 0], ['LOK', 7, 7.8, 0], ['TWO', 1, 1.4, 0]]
+BOARD = 'the pre-launch test runs are off the board'
 todo = []
+
+# The board is the one check here cleared by DOING something rather than by fixing something, and
+# from launch morning it is fatal - so the run that matters most is the one ending "1 FAILED" over a
+# game whose every other check passed. That reads as a breakage at nine on a Sunday, which is the
+# wrong thing to believe two minutes before announcing a healthy arena. Matched exactly, so a real
+# fault sitting alongside the board never gets the softer wording.
+def verdict(bad):
+    if bad == [BOARD]:
+        return ('NOT YET - every check of the game itself passed. The one thing left is a JOB, not'
+                + chr(10) + 'a fault: the board still shows the test runs. Wipe it with the line above,'
+                + chr(10) + 'then run this again - it goes green once the board is clean, and green is go.')
+    if bad:
+        return '%d FAILED: %s' % (len(bad), ', '.join(bad))
+    return 'all good'
 
 def board_todo(rows, today):
     # Matched on all four fields, not on the name: LOK is a name a real player may well ride under.
@@ -58,6 +73,12 @@ if '--self-check' in sys.argv:
     assert page_arena('const SERVER = "wss://re-tron.chanlokk97.workers.dev/ws";') is None, 'no ternary, no pass'
     print('ok   page_arena: reads the live branch, and fails on a typo, a swap or a missing ternary')
     print('ok   board_todo: finds the junk, spares a real run, and only turns fatal on launch day')
+    assert verdict([]) == 'all good', 'a clean run still reads all good'
+    assert verdict([BOARD]).startswith('NOT YET'), 'the board alone is a job, not a fault'
+    assert verdict(['the live link is the page in this folder']).startswith('1 FAILED'), 'a real single fault still reads FAILED'
+    assert verdict([BOARD, 'the live link is the page in this folder']).startswith('2 FAILED'), 'a real fault beside the board must not get the softer wording'
+    assert verdict([BOARD + ' - could not read the board']).startswith('1 FAILED'), 'an unreadable board is a fault, not the wipe job'
+    print('ok   verdict: the board alone reads as a job, and any real fault still reads FAILED')
     sys.exit(0)
 
 # Cloudflare's bot protection sits in front of the arena and turns Python-urllib away with a 403
@@ -217,7 +238,7 @@ except Exception as e:
 try:
     st, b = get(ARENA + '/top')
     left, fatal = board_todo(json.loads(b)['all'], datetime.date.today())
-    name = 'the pre-launch test runs are off the board'
+    name = BOARD
     shown = ', '.join('%s %d' % (r[0], r[1]) for r in left)
     # the key rides in the query string, which is the one thing the old wording left out, and the
     # reply lists whatever is left - so an empty list is the confirmation and there is no second
@@ -232,8 +253,10 @@ try:
         print('TODO ' + name + ' - still up: ' + shown + wipe)
         todo.append(name)
 except Exception as e:
-    check('the pre-launch test runs are off the board', False, repr(e))
+    # not BOARD: a board that cannot be read is a fault, and must not inherit the softer
+    # launch-morning wording that is matched against that exact name.
+    check(BOARD + ' - could not read the board', False, repr(e))
 
-print('\n' + ('all good' if not bad else '%d FAILED: %s' % (len(bad), ', '.join(bad))))
+print('\n' + verdict(bad))
 if todo: print('still to do before Sunday: ' + '; '.join(todo))
 sys.exit(1 if bad else 0)
