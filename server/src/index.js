@@ -11,8 +11,17 @@ const WALL_TICKS = 80;       // a barricade stands for 8s
 const TARGET = 6;            // bots top the arena up to this many bikes
 const MAX_HUMANS = 12;
 const IDLE_TICKS = 300;     // a socket with no bike on it for 30s gets hung up on (see step)
-const DIRS = {U: [0, -1], D: [0, 1], L: [-1, 0], R: [1, 0]}, BACK = {U: 'D', D: 'U', L: 'R', R: 'L'};
-const DI = {U: 0, D: 1, L: 2, R: 3};
+// DIRS is the gate a player's turn has to get through (onMsg: `DIRS[m.d]`), so it must answer for the
+// four directions and nothing else. A plain object literal answers for everything on Object.prototype
+// too - `{t:'turn', d:'constructor'}` sailed through the check, set dir to 'constructor', and the next
+// line of step() read DIRS[dir][0] off a function and moved the bike to NaN,NaN. Nothing there is a
+// crash: every edge and collision test compares against NaN and comes back false, so the bike never
+// died, never freed its seat, never let its socket go idle - the arena ticked on for it - and every
+// rider was sent a bike at null,null. A null prototype is the whole fix: the four keys behave exactly
+// as before (Object.keys and for..in still give U,D,L,R), and every inherited key is now undefined.
+const DIRS = {__proto__: null, U: [0, -1], D: [0, 1], L: [-1, 0], R: [1, 0]};
+const BACK = {__proto__: null, U: 'D', D: 'U', L: 'R', R: 'L'};
+const DI = {__proto__: null, U: 0, D: 1, L: 2, R: 3};
 const BOT_NAMES = ['VOLT', 'NEON', 'ARC', 'FLUX', 'ION', 'GRID', 'PULSE', 'ZAP', 'RAY', 'HEX'];
 const today = () => new Date().toISOString().slice(0, 10);   // one UTC day for everyone, like Snaked's board
 

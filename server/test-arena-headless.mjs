@@ -400,6 +400,36 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   is(b.timer, null, 'the tick stops, so the bill stops with it');
 }
 
+// ---- a turn the arena does not recognise is dropped, including the ones every object answers to ----
+// The other half of the same cost guard, and the nastier half: a rider holding a LIVE bike. The turn
+// check is a lookup in DIRS, and a plain object answers for 'constructor', '__proto__', 'toString' and
+// the rest of Object.prototype - so one line in any player's console used to set a real bike's heading
+// to a word, which sent it to NaN,NaN on the next tick. Nothing threw: every edge and collision test
+// compares against NaN and comes back false, so the bike could not die, never freed its seat, and kept
+// its socket out of the idle hang-up above - the arena ticked on for a rider nobody could see, and the
+// whole board was broadcast a bike at null,null. Checked at the gate and again after the tick.
+{
+  const a = arena();
+  const junk = ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf', '', 'X', 'u'];
+  for (const d of junk) {
+    const {b, say} = rider(a, 'J', 10, 30, 'R');
+    say({t: 'turn', d});
+    is(b.queue.length, 0, 'a turn of ' + JSON.stringify(d) + ' never reaches the queue');
+    a.bikes.delete(b.id); a.socks.delete(b.sock);
+  }
+  const {b, say} = rider(a, 'LOK', 10, 10, 'R');
+  say({t: 'turn', d: 'constructor'});
+  for (let i = 0; i < 5; i++) a.step();
+  is(b.dir, 'R', 'the bike keeps the heading it had');
+  assert(Number.isInteger(b.x) && Number.isInteger(b.y), 'and is still on a real cell, not NaN (' + b.x + ',' + b.y + ')');
+  is(b.x, 15, 'having ridden on exactly as if nothing was said');
+  const sent = a.feed[a.feed.length - 1].b.flat();
+  assert(sent.every(v => typeof v === 'number'), 'and no rider is sent a bike at null,null');
+  // the real cost of the old bug: a bike that cannot die holds its seat and its socket for ever
+  for (let i = 0; i < 400; i++) a.step();
+  assert(!b.alive, 'a bike that is told nonsense still dies at the edge like any other');
+}
+
 // ---- clearing the board ----
 // The only way a bad run ever comes off the board, so both halves are checked: the door, and the delete.
 {
