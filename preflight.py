@@ -257,7 +257,16 @@ try:
             '\n     while the key is out, read what players have sent - newest first, and the rows'
             '\n     named PREFLIGH are this list\'s own test notes, not players:'
             '\n     irm "%s/inbox?key=YOURADMINKEY"' % (ARENA, ARENA))
-    if not left: check(name, True, 'nothing but real runs on it')
+    if not left:
+        up = json.loads(b)['all']
+        # This used to say 'nothing but real runs on it', which is the one thing this check cannot
+        # know: it recognises those four rows and nothing else, so any NEW test run reads as real and
+        # the line goes green over a dirty board. It matters in the order the work actually happens -
+        # the wipe and this list come BEFORE the pass on a real phone, and a phone pass is a real ride
+        # that scores, so the board at announcement is one nothing ever looked at. Print what is on it
+        # rather than vouching for it. Not fatal: after launch a real board is the healthy state.
+        check(name, True, 'empty' if not up else
+              'no test runs; what is up: ' + ', '.join('%s %d' % (r[0], r[1]) for r in up[:5]))
     elif fatal: check(name, False, shown + wipe)
     else:
         print('TODO ' + name + ' - still up: ' + shown + wipe)
