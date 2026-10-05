@@ -244,9 +244,19 @@ try:
     # reply lists whatever is left - so an empty list is the confirmation and there is no second
     # command to get wrong at nine on a Sunday morning. One wipe covers both tabs: Today and All
     # time are the same runs table read two ways, so there is nothing to clear separately.
+    # The same key opens the player inbox, and pasting the wipe is the one minute it is in your hand.
+    # Worth the second paste for two reasons. The reports box is the only thing on the game no
+    # unattended session can check: check 9 above proves a note was ACCEPTED and can never prove it
+    # reads back, so this is the only moment that gap closes. And the inbox is newest-first with no
+    # filter at all, so it is not sorted by whether a human wrote it - check 9 files one note of its
+    # own every single run, which means a scheduled session landing mid-launch-day puts its test note
+    # straight on top of the player reports you are reading. They are the rows named PREFLIGH.
     wipe = ('\n     wipe before announcing. One wipe clears Today and All time together, then prints'
             '\n     what is left - empty means done. In PowerShell, with your own key in place of'
-            '\n     YOURADMINKEY:  irm -Method POST "%s/board?wipe=1&key=YOURADMINKEY"' % ARENA)
+            '\n     YOURADMINKEY:  irm -Method POST "%s/board?wipe=1&key=YOURADMINKEY"'
+            '\n     while the key is out, read what players have sent - newest first, and the rows'
+            '\n     named PREFLIGH are this list\'s own test notes, not players:'
+            '\n     irm "%s/inbox?key=YOURADMINKEY"' % (ARENA, ARENA))
     if not left: check(name, True, 'nothing but real runs on it')
     elif fatal: check(name, False, shown + wipe)
     else:
