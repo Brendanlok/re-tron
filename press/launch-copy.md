@@ -74,11 +74,11 @@ announce. The key goes in the URL, not a header, so in PowerShell it is one line
 That clears Today and All time together - they are the same runs table read two ways, so
 there is nothing to clear separately. The reply lists whatever is left, so an empty list
 is your confirmation and there is no second command to run. Swap `wipe=1` for `name=SDF`
-to drop one rider instead. Until Sunday the check prints a TODO line and leaves the
-run green; from Sunday it FAILS outright, so the list cannot go green on launch morning
-with the junk still up. It matches all four fields rather than the name, because LOK is a
-name a real player may ride under. Both halves are asserted: `python preflight.py
---self-check`.
+to drop one rider instead. Before the launch date the check prints a TODO line and leaves
+the run green; from that date on it FAILS outright, so the list cannot go green on launch
+morning with the junk still up. It matches all four fields rather than the name, because
+LOK is a name a real player may ride under. Both halves are asserted:
+`python preflight.py --self-check`.
 
 Green means go - and no TODO line under it.
 

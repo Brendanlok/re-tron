@@ -277,5 +277,8 @@ except Exception as e:
     check(BOARD + ' - could not read the board', False, repr(e))
 
 print('\n' + verdict(bad))
-if todo: print('still to do before Sunday: ' + '; '.join(todo))
+# Named from LAUNCH, not hardcoded to a weekday. 4 Oct went by un-announced, so this line read
+# 'before Sunday' on a Tuesday; and the day Lok sets a new date this branch wakes up again, on
+# whatever weekday he picks. The date it prints is then the one the board check is gated on.
+if todo: print('still to do before ' + LAUNCH.isoformat() + ': ' + '; '.join(todo))
 sys.exit(1 if bad else 0)
