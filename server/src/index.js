@@ -92,9 +92,11 @@ export class Arena {
     // rider's runs, then both list what is left. Removing anything needs a POST, so nothing that merely
     // follows the link — a preview, a prefetch, a bookmark — can empty the board by accident.
     if (path === '/board') return this.board(req);
-    // newest first, everything in one list: there is little enough of it that filtering can wait
-    if (path === '/inbox') return Response.json(
-      [...this.sql.exec('SELECT kind, name, body, ua, at FROM notes ORDER BY at DESC LIMIT 200')]);
+    // the inbox, cleaned the same way as the board: GET lists it, POST ?name=WRITER drops that
+    // writer's notes. This used to say filtering could wait, and that stopped being true the day the
+    // launch checklist started filing a note of its own on every run - by launch morning there are
+    // more of those sitting on top of the list than there are player reports underneath it.
+    if (path === '/inbox') return this.inbox(req);
     const pair = new WebSocketPair(), ws = pair[1];
     ws.accept();
     const s = {ws, bike: null, count: 0, windowAt: Date.now(), idle: 0};
@@ -237,6 +239,21 @@ export class Arena {
       else return new Response('ask for ?wipe=1 or ?name=RIDER', {status: 400});
     }
     return Response.json([...this.sql.exec('SELECT day, name, score, secs, kos, at FROM runs ORDER BY at DESC LIMIT 500')]);
+  }
+
+  // Lok taking the checklist's own test notes off the player inbox, so what is left is what people
+  // actually wrote. Same shape as board() above, and POST for the same reason: nothing that merely
+  // follows the link can delete anything. Names are stored cut to 8 characters, so the checklist's
+  // notes are named PREFLIGH, not PREFLIGHT - that is what to ask for.
+  // ponytail: no ?wipe=1 here, unlike the board. The whole point of this list is the player reports,
+  // so a one-word footgun that deletes them has no business existing. Per-writer is the only need.
+  inbox(req) {
+    const q = new URL(req.url).searchParams;
+    if (req.method === 'POST') {
+      if (!q.get('name')) return new Response('ask for ?name=WRITER', {status: 400});
+      this.sql.exec('DELETE FROM notes WHERE name = ?', q.get('name'));
+    }
+    return Response.json([...this.sql.exec('SELECT kind, name, body, ua, at FROM notes ORDER BY at DESC LIMIT 200')]);
   }
 
   // A note from a player, or a crash the page caught itself. Everything is capped and nothing is trusted:

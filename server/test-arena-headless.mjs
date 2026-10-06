@@ -462,6 +462,28 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   is(a.timer, null, 'and none of it started the arena ticking');
 }
 
+// ---- the checklist's own notes come off the player inbox, and the player reports do not ----
+// This list files one note of its own on every single run, so by launch morning the inbox is mostly
+// its own test notes with the real reports buried underneath. Real SQLite rather than a stand-in
+// list, because the part that is easy to get wrong is that the delete has to match the name as the
+// table actually STORED it - cut to 8 characters, so PREFLIGH and not PREFLIGHT.
+{
+  const a = arena({board: true});
+  const say = (name, body) => a.fetch(new Request('http://x/say',
+    {method: 'POST', body: JSON.stringify({name, body})}));
+  const inbox = (method, qs = '') => a.fetch(new Request('http://x/inbox' + qs, {method}));
+  is((await say('PREFLIGHT', 'checklist, ignore')).status, 200, 'the checklist files a note');
+  is((await say('LOK', 'the blade sticks on my phone')).status, 200, 'and a player files a real one');
+  is((await (await inbox('GET')).json()).length, 2, 'a plain read lists both and removes nothing');
+  is((await inbox('POST')).status, 400, 'a POST that names nobody is refused');
+  is((await (await inbox('GET')).json()).length, 2, 'and it left the inbox alone');
+  const left = await (await inbox('POST', '?name=PREFLIGH')).json();
+  is(left.length, 1, 'the checklist notes come off under the name the table really stored');
+  is(left[0] && left[0].name, 'LOK', 'and it is the player report that is left');
+  is((await (await inbox('POST', '?name=NOBODY')).json()).length, 1, 'a name nobody wrote under deletes nothing');
+  is(a.timer, null, 'and none of it started the arena ticking');
+}
+
 // ---- a rider who leaves the name box empty is announced by the name the board will use ----
 {
   const a = arena();

@@ -250,13 +250,18 @@ try:
     # reads back, so this is the only moment that gap closes. And the inbox is newest-first with no
     # filter at all, so it is not sorted by whether a human wrote it - check 9 files one note of its
     # own every single run, which means a scheduled session landing mid-launch-day puts its test note
-    # straight on top of the player reports you are reading. They are the rows named PREFLIGH.
+    # straight on top of the player reports you are reading. They are the rows named PREFLIGH, and
+    # since 7 Oct they can be deleted the same way a junk rider comes off the board - clear them
+    # FIRST and the list you then read is players only, however many times this ran before you woke.
     wipe = ('\n     wipe before announcing. One wipe clears Today and All time together, then prints'
             '\n     what is left - empty means done. In PowerShell, with your own key in place of'
             '\n     YOURADMINKEY:  irm -Method POST "%s/board?wipe=1&key=YOURADMINKEY"'
-            '\n     while the key is out, read what players have sent - newest first, and the rows'
-            '\n     named PREFLIGH are this list\'s own test notes, not players:'
-            '\n     irm "%s/inbox?key=YOURADMINKEY"' % (ARENA, ARENA))
+            '\n     while the key is out, read what players have sent. Clear this list\'s own test'
+            '\n     notes first - every run of this file leaves one, and they are newest so they sit'
+            '\n     on top of the real reports. It only ever deletes the name you ask for:'
+            '\n     irm -Method POST "%s/inbox?name=PREFLIGH&key=YOURADMINKEY"'
+            '\n     then read what is left, newest first - this is players only:'
+            '\n     irm "%s/inbox?key=YOURADMINKEY"' % (ARENA, ARENA, ARENA))
     if not left:
         up = json.loads(b)['all']
         # This used to say 'nothing but real runs on it', which is the one thing this check cannot
