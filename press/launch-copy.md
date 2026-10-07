@@ -7,7 +7,7 @@ Live link: https://brendanlok.github.io/re-tron/
 
 Saturday's regression list runs as one command from the repo root: `python preflight.py`.
 Seventeen checks, every one of them something that has gone stale silently before: the live
-link serves the page in this folder, the itch zip is that same page, THE PAGE OPENS THAT
+link serves the page in this folder, the itch zip holds this folder's eight files, THE PAGE OPENS THAT
 SAME ARENA, the preview image and every icon still resolve, the arena answers the menu's
 two questions, the DEPLOYED worker is the server in this folder (it reads the last deploy
 out of wrangler), and the arena actually SEATS A BIKE AND RIDES IT. That last one matters
@@ -96,7 +96,7 @@ All four verdicts are asserted offline by `python preflight.py --self-check`.
 
 | File | What it is |
 |---|---|
-| `re-tron.zip` | The game for itch's upload box: index.html, manifest, icons, favicon, og.png. No build step, no server files — the arena is a Cloudflare Worker the page talks to over the network. **Repack it whenever index.html changes**, and always after the Friday freeze, with the command under “Repacking the zip” below — plain `git archive` is not enough. |
+| `re-tron.zip` | The game for itch's upload box: index.html, manifest, icons, favicon, og.png. No build step, no server files — the arena is a Cloudflare Worker the page talks to over the network. **Repack it whenever any of those eight files changes** (preflight compares all eight, not just index.html), and always after the Friday freeze, with the command under “Repacking the zip” below — plain `git archive` is not enough. |
 | `re-tron-run.gif` | 6s loop, 460x690, 0.9 MB. The whole arena from above, six bikes, one of them cyan. Bikes ride blank, switch the blade on, lay ribbons, box each other in, and the walls fade. Recorded from the game's own attract loop, not a mock-up. |
 | `itch-cover.png` | 1260x1000 itch cover (2x itch's 630x500, same ratio) in the Breakin/Snaked layout: the arena live behind, RE-TRON and the tagline on a dark band at the foot. |
 | `shot-0-menu.png` | The menu at phone width (1000x2080, 2x). Under itch's 2160px limit. |

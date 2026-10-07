@@ -56,6 +56,12 @@ def page_arena(src):
     m = PROD_WS.search(src)
     return m.group(1) if m else None
 
+ZIPPED = ['index.html'] + ASSETS
+
+def zip_drift(inzip, repo):
+    return (['missing: ' + n for n in repo if n not in inzip]
+            + ['stale: ' + n for n in repo if n in inzip and inzip[n] != repo[n]])
+
 # runs before the network checks, so proving it costs nothing: python preflight.py --self-check
 if '--self-check' in sys.argv:
     assert board_todo(JUNK, datetime.date(2026, 10, 3)) == (JUNK, False), 'junk before launch day is not fatal'
@@ -72,6 +78,11 @@ if '--self-check' in sys.argv:
     assert page_arena("? 'wss://re-tron.chanlokk97.workers.dev/ws' : 'ws://localhost:8787/ws';") is None,         'dev and live branches the wrong way round is not a pass'
     assert page_arena('const SERVER = "wss://re-tron.chanlokk97.workers.dev/ws";') is None, 'no ternary, no pass'
     print('ok   page_arena: reads the live branch, and fails on a typo, a swap or a missing ternary')
+    assert zip_drift({'a': b'1', 'b': b'2'}, {'a': b'1', 'b': b'2'}) == [], 'a matching zip is clean'
+    assert zip_drift({'a': b'1'}, {'a': b'1', 'b': b'2'}) == ['missing: b'], 'a file left out of the zip is named as missing'
+    assert zip_drift({'a': b'1', 'b': b'OLD'}, {'a': b'1', 'b': b'2'}) == ['stale: b'], 'a file the zip has an older copy of is named as stale'
+    assert zip_drift({'a': b'1', 'b': b'2', 'spare': b'x'}, {'a': b'1', 'b': b'2'}) == [], 'a spare file in the zip is harmless, not a fault'
+    print('ok   zip_drift: tells a file missing from the zip from a stale one, and ignores spares')
     print('ok   board_todo: finds the junk, spares a real run, and only turns fatal on launch day')
     assert verdict([]) == 'all good', 'a clean run still reads all good'
     assert verdict([BOARD]).startswith('NOT YET'), 'the board alone is a job, not a fault'
@@ -102,13 +113,21 @@ try:
 except Exception as e:
     check('the live link is the page in this folder', False, repr(e))
 
-# 2. the file in itch's upload box is that same page
+# 2. the whole build in itch's upload box is this folder. Only index.html was ever compared, and the
+# repack command packs eight files - so the itch build could serve last month's manifest or a stale
+# icon with this line green, and the prose told you to repack 'whenever index.html changes', which
+# is the same hole written down. The zip went stale twice in one day on 1 Oct; that is the class.
+# A file MISSING from the zip is a different fault from a stale one - it 404s on itch - so say which.
 try:
-    z = zipfile.ZipFile('press/re-tron.zip').read('index.html')
-    check('the itch zip is that same page', z == here,
-          'zip %s / repo %s' % (sha(z), sha(here)) + ('' if z == here else ' - repack it, see press/launch-copy.md'))
+    z = zipfile.ZipFile('press/re-tron.zip')
+    inzip = {n: z.read(n) for n in z.namelist()}
+    repo = {n: (here if n == 'index.html' else open(n, 'rb').read()) for n in ZIPPED}
+    drift = zip_drift(inzip, repo)
+    check('the itch zip is this folder', not drift,
+          ('%d files, all matching, index.html %s' % (len(repo), sha(here))) if not drift
+          else ', '.join(drift) + ' - repack it, see press/launch-copy.md')
 except Exception as e:
-    check('the itch zip is that same page', False, repr(e))
+    check('the itch zip is this folder', False, repr(e))
 
 # 3. the page opens that same arena. Every check below talks to ARENA directly, so this is the only
 # one that asks the page which arena IT opens - without it the whole list goes green over a game that
