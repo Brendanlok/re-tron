@@ -804,5 +804,35 @@ function ride(a, name, y0, kos = 0) {
   }
 }
 
+// ---- every bike in the arena has its own name ----
+// The HUD's rider list is drawn by NAME, not by id, so two bots called FLUX are two identical rows in
+// front of the player. Bot names went by id % 10 and ids climb for ever, so the list came round again
+// while the earlier bot of that name was still riding: measured 736 of 6000 ticks in one run and 1092 in
+// another, first about two minutes in. Watch a long window rather than one tick, because it takes a few
+// knockouts to show up at
+// all - the old rule passed any check that only looked at the first six bots.
+{
+  const a = arena({bots: true});
+  let dupTicks = 0, worst = null;
+  for (let i = 0; i < 6000; i++) {
+    a.step();
+    const names = [...a.bikes.values()].map(b => b.name);
+    if (new Set(names).size !== names.length) { dupTicks++; if (!worst) worst = names.slice().sort().join(','); }
+  }
+  is(dupTicks, 0, 'no two bikes in the arena ever share a name over 6000 ticks'
+    + (worst ? ' (saw ' + worst + ')' : ''));
+}
+
+// A bot must not take a name a HUMAN is already riding under either: the player's own row is picked out
+// of that same list by matching the name, so a bot wearing it gets highlighted as 'you'.
+{
+  const a = arena({bots: true});
+  const mine = a.spawn('FLUX', false);
+  assert(mine && mine.name === 'FLUX', 'a rider may call themselves FLUX, which is also a bot name');
+  for (let i = 0; i < 400; i++) { a.step(); if (!mine.alive) break; }
+  is([...a.bikes.values()].filter(b => b.bot && b.name === 'FLUX').length, 0,
+    'and no bot ever rides under the name that rider is using while they are in the arena');
+}
+
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
