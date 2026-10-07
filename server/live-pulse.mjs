@@ -12,6 +12,12 @@
 const host = (process.argv[2] || 'wss://re-tron.chanlokk97.workers.dev').replace(/\/+$/, '');
 const HOLD = 600;      // ms in the saddle: six ticks to watch it move, and floor(0.6s) is still 0
 const PATIENCE = 8000; // the whole thing, including a cold Durable Object waking up
+// The sub-second hold is load-bearing, not a tuning knob: at HOLD >= 1000 the bike scores 1 instead
+// of 0 and this probe starts writing a RIDERn run onto the LIVE board on every preflight run - and
+// nothing would say so, because the junk-run check matches four names by hand and RIDERn is not one
+// of them. So it fails loudly here instead, before a socket is opened. Raising it means scoring 0
+// another way (ask the referee not to record, or drop before the first tick like idle-stop.mjs).
+if (HOLD >= 1000) throw new Error('live-pulse HOLD must stay under 1000ms - at a second it scores 1 and leaves a RIDERn run on the live board');
 
 let ws, seat = null, ticks = [], seen = [], over = false;
 
