@@ -14,4 +14,8 @@ Your bike leaves nothing behind until you switch on the blade. Then it lays a wa
   - Before announcing: `python preflight.py` from the repo root - the whole launch list in one
     command, run against the live arena by default. It seats a real bike and rides it, so green
     means playable and not merely reachable. `node server/live-pulse.mjs` is that check alone.
+    Add `--no-note` for an unattended run: it skips the one check that writes, a test note into
+    the live player inbox that only the ADMIN secret can clear. Everything else still runs. Lok's
+    own run before announcing takes no flag, because the write half is the only proof the reports
+    channel still saves what players send.
   - Check a running server: `node server/test-arena.mjs` against `wrangler dev`. It refuses a non-local arena, because it rides as LOK and TWO and asserts both runs are on the board - against the live one it plants two junk rows only the ADMIN secret can clear. `--live` overrides it.

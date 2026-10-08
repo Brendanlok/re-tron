@@ -56,6 +56,30 @@ def page_arena(src):
     m = PROD_WS.search(src)
     return m.group(1) if m else None
 
+# The write half of the reports check is the only thing on this list that LEAVES something behind,
+# and only Lok's key can clear it. That is a real cost, not a theoretical one: on 8 Oct alone four
+# scheduled sessions declined to run this whole file for that one reason - losing the two checks
+# nothing else can make, that the arena really seats a bike and that its clock really stops - and
+# two sessions ran it anyway and buried launch morning's reports a note deeper. --no-note takes the
+# free half (an empty note is REFUSED, so it writes nothing) and says plainly that the other is
+# unproved. Lok's plain run is UNCHANGED and still proves the INSERT: the default must not go
+# quietly weaker in the one tool he reads before announcing, because a broken reports channel looks
+# exactly like a launch day on which nobody had anything to say. Pure, so --self-check pins both.
+REPORTS = 'player reports still get through'
+
+def report_verdict(empty, real):
+    # real is None when --no-note skipped the write half
+    if real is None:
+        return (empty == 400,
+                'an empty note %d, so the route reaches say() and its guard runs' % empty
+                + ('' if empty == 400 else ' - wanted 400')
+                + '. WRITE HALF SKIPPED by --no-note, so the INSERT is NOT proved here'
+                + ' - run this without the flag before announcing')
+    return ((empty, real) == (400, 200),
+            'an empty note %d, a real one %d' % (empty, real)
+            + ('' if (empty, real) == (400, 200) else
+               ' - wanted 400 then 200. Nothing on the page will ever tell you this is broken'))
+
 ZIPPED = ['index.html'] + ASSETS
 
 def zip_drift(inzip, repo):
@@ -68,6 +92,17 @@ if '--self-check' in sys.argv:
     assert board_todo(JUNK, LAUNCH) == (JUNK, True), 'junk ON launch day is fatal'
     assert board_todo([['REAL', 40, 30.0, 1]], LAUNCH) == ([], True), 'a real run is not junk'
     assert board_todo([], LAUNCH) == ([], True), 'a clean board is clean'
+    # Both halves of the reports check, including the one --no-note gives up. The negative cases are
+    # the point: either answer alone going green over a broken channel is the fault this check exists
+    # for, and a --no-note run that reads as proof of the INSERT would be worse than not running.
+    assert report_verdict(400, 200)[0], 'refused then accepted is the healthy pair'
+    assert not report_verdict(400, 500)[0], 'a refused INSERT is a fault'
+    assert not report_verdict(200, 200)[0], 'an empty note ACCEPTED means the guard is gone'
+    assert report_verdict(400, None)[0], '--no-note passes on the guard alone'
+    assert not report_verdict(500, None)[0], '--no-note still fails over a dead route'
+    assert 'NOT proved' in report_verdict(400, None)[1], '--no-note must admit the write is unproved'
+    assert 'NOT proved' not in report_verdict(400, 200)[1], 'a full run must not hedge'
+    print('ok   report_verdict: both halves wanted, and --no-note says which one it gave up')
     # built with chr(10) so this file carries no escapes of its own: the real SERVER line is
     # split across two lines in index.html, and the regex has to cross that break.
     line = ("const SERVER = /^(localhost)$/.test(location.hostname)" + chr(10) +
@@ -242,15 +277,23 @@ def post_say(body):
     except urllib.error.HTTPError as e:
         return e.code
 
+# The write half is the only thing on this list that LEAVES something behind, and only Lok's key
+# can clear it. That turned into a real cost rather than a theoretical one: on 8 Oct alone, four
+# scheduled sessions declined to run this whole file for that one reason - losing the two checks
+# nothing else can make, that the arena actually seats a bike and that its clock still stops - and
+# two sessions ran it anyway and buried launch morning's reports one note deeper. --no-note takes
+# the free half and says plainly that the other is unproved. Lok's plain run is UNCHANGED and still
+# proves the INSERT: the default must not go quietly weaker in the one tool he reads before
+# announcing, because a broken channel here looks exactly like a day nobody had anything to say.
 try:
     empty = post_say('   ')
-    real = post_say('preflight check, ignore - the launch checklist proving reports still arrive')
-    check('player reports still get through', (empty, real) == (400, 200),
-          'an empty note %d, a real one %d' % (empty, real)
-          + ('' if (empty, real) == (400, 200) else
-             ' - wanted 400 then 200. Nothing on the page will ever tell you this is broken'))
+    # None, not a skipped call inside the verdict: the decision not to write is taken HERE, where
+    # it is visible, rather than hidden behind a function that may or may not reach the network.
+    real = None if '--no-note' in sys.argv else post_say(
+        'preflight check, ignore - the launch checklist proving reports still arrive')
+    check(REPORTS, *report_verdict(empty, real))
 except Exception as e:
-    check('player reports still get through', False, repr(e))
+    check(REPORTS, False, repr(e))
 
 # 10. the pre-launch test runs are off the all-time board. Cheap and tick-free: /top is the same path
 # the menu already asks, so this adds one read and wakes nothing. See board_todo at the top.
@@ -276,7 +319,7 @@ try:
             '\n     what is left - empty means done. In PowerShell, with your own key in place of'
             '\n     YOURADMINKEY:  irm -Method POST "%s/board?wipe=1&key=YOURADMINKEY"'
             '\n     while the key is out, read what players have sent. Clear this list\'s own test'
-            '\n     notes first - every run of this file leaves one, and they are newest so they sit'
+            '\n     notes first - every run that is not --no-note leaves one, newest so they sit'
             '\n     on top of the real reports. It only ever deletes the name you ask for:'
             '\n     irm -Method POST "%s/inbox?name=PREFLIGH&key=YOURADMINKEY"'
             '\n     then read what is left, newest first - this is players only:'
