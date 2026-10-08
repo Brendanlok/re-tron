@@ -91,6 +91,34 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   assert(b.blade, 'but a press once there is charge again deploys it');
 }
 
+// ---- a press while the HUD still says "recharging" deploys anyway, and costs the lockout again ----
+// The page dims the BLADE button and reads 'recharging' under 12% (LOW in index.html), on the stated
+// grounds that under that the blade is not worth taking. The referee's gate is charge > 0, not LOW, so
+// the press still fires - the HUD discourages it but nothing refuses it. Measured 2026-10-08: pressing
+// at 2% buys ONE cell and restarts the full 1s lockout, which leaves the blade unusable 1.2s longer than
+// not pressing at all (1.8s if pressed at 8%). Whether to gate it at LOW is a feel call and Lok's, so
+// this pins what the rule does TODAY: if a later session "finishes" the LOW fix by moving the gate, the
+// first line here flips rather than the game changing in silence.
+{
+  const a = arena();
+  const {b, say} = rider(a, 'LOK', 2, 2, 'R');
+  const ride = () => { if (b.dir === 'R' && b.x >= 37) say({t: 'turn', d: 'D'});
+    else if (b.dir === 'D' && b.y >= 57) say({t: 'turn', d: 'L'}); a.step(); };
+  say({t: 'blade', on: true});
+  // both loops are capped: a charge rule that never empties, or never climbs again, should fail this
+  // check on the line below rather than hang the whole suite with nothing to read
+  for (let i = 0; i < 60 && a.pack(b)[5] !== 0; i++) ride();   // drain it dry
+  for (let i = 0; i < 60 && a.pack(b)[5] === 0; i++) ride();   // and sit out the 1s lockout
+  const charge = a.pack(b)[5], before = laid(a, b.id);
+  assert(charge > 0 && charge < 12, 'the charge is back above zero but still under the HUD\'s own LOW (' + charge + '%)');
+  say({t: 'blade', on: true});
+  a.step();
+  assert(b.blade, 'a press there still deploys - the referee gates on charge > 0, not on LOW');
+  is(laid(a, b.id) - before, 1, 'and buys exactly one cell of wall before running dry again');
+  is(b.gap, 10, 'then the full 1s lockout starts over, on the same tick');
+  is(a.pack(b)[5], 0, 'with the charge back at zero');
+}
+
 // ---- barricades stand for 8s and then let go ----
 {
   const a = arena();
