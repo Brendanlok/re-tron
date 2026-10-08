@@ -296,6 +296,17 @@ function connect() {
   setTimeout(() => { if (ws === sock && !riding) sock.close(); }, 10000);
 }
 function hangUp() { const w = ws; ws = null; if (w) w.close(); bikes.clear(); walls.clear(); }
+// A tick lands every 100ms for as long as you are on a bike, so silence means something is wrong — and
+// the two ways it goes wrong both leave the socket looking open. A phone that loses signal sends no close
+// (the server already hangs up on those after 30s, from its side), and a referee that stops ticking keeps
+// answering /count and /top with a 200. Either way the page sat on a board frozen mid-corner with no
+// message, no score and no way back to the menu but a reload. Nothing legitimate is quiet for 5s — twelve
+// riders with blades out held 114ms worst — so call it the dropped connection it is and use the screen
+// that already exists for one, which says the run still counted.
+setInterval(() => {
+  if (!riding || performance.now() - tickAt < 5000) return;
+  hangUp(); riding = false; showResult(null, 'lost');
+}, 1000);
 function menuReady() { $('startBtn').disabled = false; $('startSub').textContent = isTouch ? 'tap to start' : 'space or click'; }
 // the menu's two questions — how busy is it, and who is winning — both over plain http,
 // so the menu never holds a socket open and never wakes the arena's tick
@@ -361,6 +372,7 @@ function onMsg(m) {
     for (const b of m.bikes) setBike(b);
   } else if (m.t === 'you') {
     me = m.id; riding = true; myStart = tick; pend = []; myKos = 0; bladeOn = false;
+    tickAt = performance.now();   // the quiet-arena watch starts now, not at the menu's last pretend tick
     if (m.b) setBike(m.b);   // the arena says where it dropped you, so the first frame is already your bike
     paint();
     $('overlay').hidden = true; $('hud').hidden = $('board').hidden = $('hint').hidden = false;

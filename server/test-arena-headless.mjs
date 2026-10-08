@@ -885,5 +885,34 @@ function ride(a, name, y0, kos = 0) {
   is(top.filter(([n, sc, bot]) => isYou(n, !!bot, 7, new Map([[7, {n: 'VOLT', bot: false}]]))).length, 0,
     'and a rider whose name no live bike shares is not highlighted on a bot row');
 }
+// While you are on a bike the referee sends a tick every 100ms (see the broadcast at the end of step).
+// So silence is a fault, and both faults that produce it leave the socket looking open from the page's
+// side - a phone that loses signal sends no close, and a referee that stops ticking still answers /count
+// and /top with a 200. The page's watch on that is the only thing between either fault and a rider
+// staring at a frozen board, so it is run here verbatim rather than restated, body and all.
+{
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const open = page.indexOf('setInterval(() => {', page.indexOf('function hangUp'));
+  const body = open > 0 ? page.slice(page.indexOf('{', open + 17) + 1, page.indexOf('}, 1000);', open)) : '';
+  assert(body.includes('riding') && body.includes('tickAt') && body.includes('showResult'),
+    'the page watches for an arena that has gone quiet under you');
+  // `with` so the real body's own assignment to `riding` lands somewhere this test can read it back
+  const run = body ? new Function('ctx', 'with (ctx) {' + body + '}') : () => {};
+  const drive = (riding, quietMs) => {
+    const ctx = {riding, tickAt: 0, dropped: false, shown: null,
+      performance: {now: () => quietMs},
+      hangUp() { ctx.dropped = true; },
+      showResult(s, reason) { ctx.shown = reason; }};
+    run(ctx);
+    return ctx;
+  };
+  is(drive(true, 100).shown, null, 'a tick that landed 100ms ago is an arena running normally');
+  is(drive(true, 4900).shown, null, 'and 4.9s of quiet is still given the benefit of the doubt');
+  const out = drive(true, 5100);
+  is(out.shown, 'lost', 'an arena quiet for over 5s under a rider is reported as a lost connection');
+  is(out.dropped, true, 'and the socket is let go rather than left holding the arena open');
+  is(out.riding, false, 'and the rider is off the bike, so it is reported once and not every second');
+  is(drive(false, 600000).shown, null, 'a menu left open all day is never told it was disconnected');
+}
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
