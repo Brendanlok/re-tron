@@ -834,5 +834,28 @@ function ride(a, name, y0, kos = 0) {
     'and no bot ever rides under the name that rider is using while they are in the arena');
 }
 
+// The bot dedupe above closes the common way two rows read the same, but not the last one: a rider who
+// types a name a bot is ALREADY riding under keeps it, and so does the bot, which was named first. The
+// live rider list carries no bike id - it is [name, score, botflag] - so the page cannot match on id.
+// It can match on the flag, and a player is never a bot. Lifted out of index.html rather than restated.
+{
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const pb = page.indexOf('function paintBoard');   // the LIVE rider list, not the menu board below it
+  const mark = page.indexOf("? ' you' : ''", pb);
+  const open = page.lastIndexOf('+ (', mark);   // the condition's own bracket, which holds brackets itself
+  const cond = mark > 0 ? page.slice(open + 3, mark).trim() : '';
+  assert(!!cond && cond.includes('names.get(me)'), 'the page picks the rider their own row out of the live list');
+  const isYou = cond
+    ? new Function('n', 'bot', 'me', 'names', 'return !!(' + cond + ')')
+    : () => false;
+  // the player is bike 7 riding as FLUX; bot 3 had the name first and keeps it
+  const names = new Map([[7, {n: 'FLUX', bot: false}], [3, {n: 'FLUX', bot: true}]]);
+  const top = [['FLUX', 44, 1], ['FLUX', 31, 0], ['VOLT', 12, 1]];
+  const you = top.filter(([n, sc, bot]) => isYou(n, !!bot, 7, names));
+  is(you.length, 1, 'exactly one row is highlighted when a bot shares the rider name');
+  is(you.length === 1 && you[0][2], 0, 'and it is the rider, not the bot that was named first');
+  is(top.filter(([n, sc, bot]) => isYou(n, !!bot, 7, new Map([[7, {n: 'VOLT', bot: false}]]))).length, 0,
+    'and a rider whose name no live bike shares is not highlighted on a bot row');
+}
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);

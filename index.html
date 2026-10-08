@@ -489,7 +489,7 @@ function showResult(s, reason, killer) {
 }
 function paintBoard(top) {
   $('board').innerHTML = '<div class="ct">Top riders</div>' + top.map(([n, sc, bot]) =>
-    '<div class="row' + (bot ? ' bot' : '') + (names.get(me) && n === names.get(me).n ? ' you' : '') + '"><span class="nm">' +
+    '<div class="row' + (bot ? ' bot' : '') + (!bot && names.get(me) && n === names.get(me).n ? ' you' : '') + '"><span class="nm">' +
     n.replace(/[<&]/g, '') + '</span><b>' + sc + '</b></div>').join('');
 }
 // Under this, the blade is not worth taking: a tap at 5% laid two cells and then started the full
