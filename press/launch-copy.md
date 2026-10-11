@@ -5,13 +5,13 @@ posted.** Announcing the game is Lok's call; this folder only has the pieces rea
 
 Live link: https://brendanlok.github.io/re-tron/
 
-Saturday's regression list runs as one command from the repo root: `python preflight.py`.
+The regression list runs as one command from the repo root: `python preflight.py`.
 Seventeen checks, every one of them something that has gone stale silently before: the live
 link serves the page in this folder, the itch zip holds this folder's eight files, THE PAGE OPENS THAT
 SAME ARENA, the preview image and every icon still resolve, the arena answers the menu's
 two questions, the DEPLOYED worker is the server in this folder (it reads the last deploy
 out of wrangler), and the arena actually SEATS A BIKE AND RIDES IT. That last one matters
-most on Sunday morning: the two cheap paths the menu uses never touch the tick, so a
+most on launch morning: the two cheap paths the menu uses never touch the tick, so a
 referee that throws on every tick still answers both with a healthy 200 - every other
 check here would pass over an arena nobody can play. It rides for six tenths of a second
 and never asks for the blade, so it lays no wall, can own no knockout, scores 0, and the
@@ -74,7 +74,18 @@ announce. The key goes in the URL, not a header, so in PowerShell it is one line
 That clears Today and All time together - they are the same runs table read two ways, so
 there is nothing to clear separately. The reply lists whatever is left, so an empty list
 is your confirmation and there is no second command to run. Swap `wipe=1` for `name=SDF`
-to drop one rider instead. Before the launch date the check prints a TODO line and leaves
+to drop one rider instead.
+
+While the key is in your hand, read the player inbox - it is the one thing no unattended
+session can check, because the sixteenth check can prove a note was accepted and never that
+it reads back. Clear this list's own test notes first or they sit on top of the real reports
+(every run that is not `--no-note` leaves one, newest first):
+
+    irm -Method POST "https://re-tron.chanlokk97.workers.dev/inbox?name=PREFLIGH&key=YOURADMINKEY"
+    irm "https://re-tron.chanlokk97.workers.dev/inbox?key=YOURADMINKEY"
+
+The check prints both lines itself when it fires, so this is where to look them up, not a
+second thing to remember. Before the launch date the check prints a TODO line and leaves
 the run green; from that date on it FAILS outright, so the list cannot go green on launch
 morning with the junk still up. It matches all four fields rather than the name, because
 LOK is a name a real player may ride under. Both halves are asserted:
