@@ -652,6 +652,13 @@ const cv = $('cv');
 cv.addEventListener('pointerdown', e => { swipe = {x: e.clientX, y: e.clientY}; });
 cv.addEventListener('pointermove', e => {
   if (!swipe) return;
+  // A mouse that is not pressed is not a drag. pointerup is the only thing that let the swipe go, and it
+  // can go missing: a right-click's context menu eats it, and so does releasing outside the window. The
+  // swipe then outlived the gesture and EVERY later mouse move across the arena steered the bike — a turn
+  // the player never asked for, in a game where a wrong turn is a crash. Measured 15 Oct: a right-press
+  // on the arena and then two plain moves with no button down sent a real {"t":"turn"} to the referee.
+  // Gated on mouse because touch reports buttons:1 while the finger is down, so a thumb drag is untouched.
+  if (e.pointerType === 'mouse' && !e.buttons) { swipe = null; return; }
   const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
   if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
   turn(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'R' : 'L') : (dy > 0 ? 'D' : 'U'));
