@@ -5,7 +5,7 @@ const URL_ = ARGS.find(a => !a.startsWith('--')) || 'ws://localhost:8787/ws';
 // asserts below REQUIRE those runs to have been written down - so against the live arena it necessarily
 // plants two junk rows on the all-time board, and only the ADMIN secret can clear them. Two of the four
 // junk rows sitting on the live board right now are LOK and TWO, from exactly this. The README already
-// said not to and that did not hold, so the test refuses instead of asking nicely. Saturday's regression
+// said not to and that did not hold, so the test refuses instead of asking nicely. The regression
 // pass is the dangerous one: run it against a local arena, where it proves the same rules for free.
 const LOCAL = /^wss?:\/\/(localhost|127\.0\.0\.1|\[::1\])([:/]|$)/.test(URL_);
 if (!LOCAL && !FORCE) {

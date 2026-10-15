@@ -1,4 +1,4 @@
-# Saturday's regression list, as one command: python preflight.py
+# The regression list, as one command: python preflight.py
 # Every check here is one that has silently drifted before - the itch zip went stale twice on
 # 1 Oct without anyone noticing, and the repo rename could have left the preview pointing at a
 # dead /tron/ path. Prose in press/launch-copy.md told you to check these; nothing ran them.
@@ -18,7 +18,7 @@ def check(name, ok, detail=''):
 # four runs nobody played, and the best of them says the record is twenty seconds. Written down on
 # 23 Sep, and it has DRIFTED since without anyone noticing - two rows then, four now - which is how
 # a to-do that nothing runs gets forgotten. The wipe needs the ADMIN key, so it stays Lok's to run;
-# this only makes sure he cannot reach Sunday without being told. The verdict is split out so both
+# this only makes sure he cannot reach launch day without being told. The verdict is split out so both
 # halves can be asserted, the way idle-stop.mjs is - the live board can only ever show the one half.
 LAUNCH = datetime.date(2026, 10, 4)
 JUNK = [['SDF', 29, 19.6, 1], ['TEST', 21, 21.6, 0], ['LOK', 7, 7.8, 0], ['TWO', 1, 1.4, 0]]
@@ -27,7 +27,7 @@ todo = []
 
 # The board is the one check here cleared by DOING something rather than by fixing something, and
 # from launch morning it is fatal - so the run that matters most is the one ending "1 FAILED" over a
-# game whose every other check passed. That reads as a breakage at nine on a Sunday, which is the
+# game whose every other check passed. That reads as a breakage on launch morning, which is the
 # wrong thing to believe two minutes before announcing a healthy arena. Matched exactly, so a real
 # fault sitting alongside the board never gets the softer wording.
 def verdict(bad):
@@ -327,7 +327,7 @@ try:
     shown = ', '.join('%s %d' % (r[0], r[1]) for r in left)
     # the key rides in the query string, which is the one thing the old wording left out, and the
     # reply lists whatever is left - so an empty list is the confirmation and there is no second
-    # command to get wrong at nine on a Sunday morning. One wipe covers both tabs: Today and All
+    # command to get wrong at nine on launch morning. One wipe covers both tabs: Today and All
     # time are the same runs table read two ways, so there is nothing to clear separately.
     # The same key opens the player inbox, and pasting the wipe is the one minute it is in your hand.
     # Worth the second paste for two reasons. The reports box is the only thing on the game no

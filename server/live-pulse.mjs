@@ -1,6 +1,6 @@
 // Does the arena actually PLAY? Run it: node server/live-pulse.mjs [wss://host]
 //
-// This closes the quietest hole in Sunday's check list. /count and /top answer without ever touching
+// This closes the quietest hole in the launch check list. /count and /top answer without ever touching
 // step() - that is deliberate, it is what keeps an idle menu free - but it means a referee that throws
 // on every tick still serves both of them a cheerful 200, and preflight prints "all good" over an arena
 // nobody can ride. Nothing in the list opened a socket, so nothing in the list could tell.
