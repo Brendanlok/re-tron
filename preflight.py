@@ -2,7 +2,7 @@
 # Every check here is one that has silently drifted before - the itch zip went stale twice on
 # 1 Oct without anyone noticing, and the repo rename could have left the preview pointing at a
 # dead /tron/ path. Prose in press/launch-copy.md told you to check these; nothing ran them.
-import datetime, hashlib, json, re, subprocess, sys, urllib.error, urllib.request, zipfile
+import datetime, hashlib, json, os, re, subprocess, sys, urllib.error, urllib.request, zipfile
 
 LIVE = 'https://brendanlok.github.io/re-tron/'
 ARENA = 'https://re-tron.chanlokk97.workers.dev'
@@ -60,25 +60,40 @@ def page_arena(src):
 # and only Lok's key can clear it. That is a real cost, not a theoretical one: on 8 Oct alone four
 # scheduled sessions declined to run this whole file for that one reason - losing the two checks
 # nothing else can make, that the arena really seats a bike and that its clock really stops - and
-# two sessions ran it anyway and buried launch morning's reports a note deeper. --no-note takes the
-# free half (an empty note is REFUSED, so it writes nothing) and says plainly that the other is
-# unproved. Lok's plain run is UNCHANGED and still proves the INSERT: the default must not go
+# two sessions ran it anyway and buried launch morning's reports a note deeper. The free half (an
+# empty note is REFUSED, so it writes nothing) is always taken, and the run says plainly when the
+# other half is unproved. Lok's plain run is UNCHANGED and still proves the INSERT: it must not go
 # quietly weaker in the one tool he reads before announcing, because a broken reports channel looks
 # exactly like a launch day on which nobody had anything to say. Pure, so --self-check pins both.
 REPORTS = 'player reports still get through'
 
 def report_verdict(empty, real):
-    # real is None when --no-note skipped the write half
+    # real is None when the write half was skipped
     if real is None:
         return (empty == 400,
                 'an empty note %d, so the route reaches say() and its guard runs' % empty
                 + ('' if empty == 400 else ' - wanted 400')
-                + '. WRITE HALF SKIPPED by --no-note, so the INSERT is NOT proved here'
-                + ' - run this without the flag before announcing')
+                + '. WRITE HALF SKIPPED, so the INSERT is NOT proved here'
+                + ' - run it yourself, or with --note, before announcing')
     return ((empty, real) == (400, 200),
             'an empty note %d, a real one %d' % (empty, real)
             + ('' if (empty, real) == (400, 200) else
                ' - wanted 400 then 200. Nothing on the page will ever tell you this is broken'))
+
+# WHO is running it decides the write half, not a flag anyone has to remember. Five notes are
+# already sitting on top of the player queue because remembering was the plan: two on 8 Oct and
+# three on 15 Oct from the session that wrote this - two forgotten, one deliberate, proving the
+# escape hatch below still writes. Lok runs this by hand in PowerShell, where CLAUDECODE is not
+# set, so his run is unchanged, note and all; a run from inside a Claude session takes the free
+# half without being told, and --note forces the write when a session really does need the INSERT
+# proved. --no-note still wins over both.
+# NOT a terminal check, though that was the obvious first try: measured 15 Oct, stdin IS a tty
+# inside the agent's shell (stdout is not), so isatty cannot tell Lok from a scheduled session.
+def writes_note(argv, in_claude):
+    if '--no-note' in argv:
+        return False
+    return '--note' in argv or not in_claude
+
 
 ZIPPED = ['index.html'] + ASSETS
 
@@ -102,7 +117,12 @@ if '--self-check' in sys.argv:
     assert not report_verdict(500, None)[0], '--no-note still fails over a dead route'
     assert 'NOT proved' in report_verdict(400, None)[1], '--no-note must admit the write is unproved'
     assert 'NOT proved' not in report_verdict(400, 200)[1], 'a full run must not hedge'
-    print('ok   report_verdict: both halves wanted, and --no-note says which one it gave up')
+    print('ok   report_verdict: both halves wanted, and a skipped write says which one it gave up')
+    assert writes_note([], False), "Lok's own run writes the note, and must keep doing it"
+    assert not writes_note([], True), 'a run inside a session leaves nothing in the inbox'
+    assert writes_note(['--note'], True), '--note forces the write from inside a session'
+    assert not writes_note(['--note', '--no-note'], False), '--no-note wins over everything'
+    print('ok   writes_note: only Lok writes by default, --note and --no-note override it')
     # built with chr(10) so this file carries no escapes of its own: the real SERVER line is
     # split across two lines in index.html, and the regex has to cross that break.
     line = ("const SERVER = /^(localhost)$/.test(location.hostname)" + chr(10) +
@@ -281,16 +301,19 @@ def post_say(body):
 # can clear it. That turned into a real cost rather than a theoretical one: on 8 Oct alone, four
 # scheduled sessions declined to run this whole file for that one reason - losing the two checks
 # nothing else can make, that the arena actually seats a bike and that its clock still stops - and
-# two sessions ran it anyway and buried launch morning's reports one note deeper. --no-note takes
-# the free half and says plainly that the other is unproved. Lok's plain run is UNCHANGED and still
-# proves the INSERT: the default must not go quietly weaker in the one tool he reads before
-# announcing, because a broken channel here looks exactly like a day nobody had anything to say.
+# two sessions ran it anyway and buried launch morning's reports one note deeper. A run inside a
+# session now takes the free half on its own and says plainly that the other is unproved. Lok's
+# run is UNCHANGED - he runs it by hand, so it still writes the note and still proves the INSERT:
+# the default must not go quietly weaker in the one tool he reads before announcing, because a
+# broken channel here looks exactly like a day on which nobody had anything to say.
 try:
     empty = post_say('   ')
-    # None, not a skipped call inside the verdict: the decision not to write is taken HERE, where
-    # it is visible, rather than hidden behind a function that may or may not reach the network.
-    real = None if '--no-note' in sys.argv else post_say(
-        'preflight check, ignore - the launch checklist proving reports still arrive')
+    # None, not a skipped call inside the verdict: whether to write is answered by writes_note,
+    # which touches nothing, and the call is made or not made HERE where that is visible - rather
+    # than hidden behind a function that may or may not reach the network.
+    real = post_say(
+        'preflight check, ignore - the launch checklist proving reports still arrive'
+    ) if writes_note(sys.argv, bool(os.environ.get('CLAUDECODE'))) else None
     check(REPORTS, *report_verdict(empty, real))
 except Exception as e:
     check(REPORTS, False, repr(e))
@@ -319,7 +342,7 @@ try:
             '\n     what is left - empty means done. In PowerShell, with your own key in place of'
             '\n     YOURADMINKEY:  irm -Method POST "%s/board?wipe=1&key=YOURADMINKEY"'
             '\n     while the key is out, read what players have sent. Clear this list\'s own test'
-            '\n     notes first - every run that is not --no-note leaves one, newest so they sit'
+            '\n     notes first - every run of this you make yourself leaves one, newest so they sit'
             '\n     on top of the real reports. It only ever deletes the name you ask for:'
             '\n     irm -Method POST "%s/inbox?name=PREFLIGH&key=YOURADMINKEY"'
             '\n     then read what is left, newest first - this is players only:'
