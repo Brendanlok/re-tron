@@ -914,5 +914,54 @@ function ride(a, name, y0, kos = 0) {
   is(out.riding, false, 'and the rider is off the bike, so it is reported once and not every second');
   is(drive(false, 600000).shown, null, 'a menu left open all day is never told it was disconnected');
 }
+// The menu's attract loop is the first thing every visitor sees, and it exists for one reason: with no
+// socket open the floor used to be empty, which read as a dead game. So "the riders keep riding" is the
+// whole requirement, and nothing had ever checked it. It cannot be checked live - the loop only runs
+// where there is no socket and no server - so it is lifted out of index.html and driven here, verbatim,
+// the same way the quiet-arena watch above is. Seeded, because an assertion about a random walk that
+// flakes once a week is worse than no assertion.
+{
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const open = page.indexOf('const DEMO = [');
+  const end = page.indexOf('\nlet last', open);
+  // the headings the loop steers by are declared at the top of the page, not next to it
+  const dirs = (page.match(/const DIRN = \[[^;]+;/) || [''])[0];
+  const src = open > 0 && end > open && dirs ? dirs + page.slice(open, end) : '';
+  assert(src.includes('function demoStep') && src.includes('bikes.set') && src.includes('DIRN'),
+    'the menu has an attract loop that rides without a server');
+  // mulberry32, so the same arena plays out every run. A plain LCG was tried first and multiplies
+  // past 2^53 in a double, which degenerates and invented a 5s dead menu that the real loop never has.
+  const seeded = seed => { let s = seed >>> 0; const M = Object.create(Math);   // Object.create keeps the rest of Math
+    M.random = () => { s = (s + 0x6D2B79F5) >>> 0; let t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; return M; };
+  const ride = (seed, ticks) => {
+    const ctx = {W: 40, H: 60, WALL_TICKS: 80, tick: 0, tickAt: 0,
+      walls: new Map(), bikes: new Map(), Math: seeded(seed),
+      performance: {now: () => ctx.tick * 100},
+      derez: () => {}, colOf: () => '#fff'};   // particles and colour: nothing to measure
+    const step = new Function('ctx', 'with (ctx) {' + src + '\nreturn demoStep; }')(ctx);
+    let empty = 0, worstGap = 0, gap = 0, mostWalls = 0, aliveSum = 0;
+    for (let i = 0; i < ticks; i++) {
+      step();
+      aliveSum += ctx.bikes.size;
+      mostWalls = Math.max(mostWalls, ctx.walls.size);
+      if (ctx.bikes.size) gap = 0; else { empty++; worstGap = Math.max(worstGap, ++gap); }
+    }
+    return {empty, worstGap, mostWalls, mean: aliveSum / ticks};
+  };
+  // 6000 ticks is ten simulated minutes - longer than anyone reads a menu for
+  for (const seed of [1, 7]) {
+    const r = src ? ride(seed, 6000) : {empty: 6000, worstGap: 6000, mostWalls: 0, mean: 0};
+    assert(r.mean > 3, 'the menu keeps riders on the floor over ten minutes, seed ' + seed +
+      ' (' + r.mean.toFixed(2) + ' of 4)');
+    assert(r.empty < 300, 'and the floor is almost never empty (' + (100 * r.empty / 6000).toFixed(2) + '% of ticks)');
+    // the one that matters: a long dead stretch is the "reads as dead" fault coming back
+    assert(r.worstGap <= 30, 'and never sits empty for 3s at a stretch (worst ' + (r.worstGap / 10).toFixed(1) + 's)');
+    // four riders laying at most one cell a tick, fading after WALL_TICKS, can never hold more than 320
+    assert(r.mostWalls > 0 && r.mostWalls <= 320,
+      'and the menu walls fade instead of filling the floor (peak ' + r.mostWalls + ' of 320)');
+  }
+}
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
