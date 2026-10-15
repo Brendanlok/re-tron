@@ -1,0 +1,6 @@
+# The live page is compared to this file byte for byte - preflight does it, and so does the itch-zip
+# check - so the working copy has to stay LF whatever core.autocrlf says. It is true on this machine,
+# and a plain `git checkout -- index.html` rewrote the page as CRLF once (65,971 bytes became 66,966)
+# while git went on reporting the tree clean. Every byte-identity check then disagreed with a page that
+# was perfectly fine. Pin the eol here so a checkout can never produce that again.
+*.html text eol=lf
