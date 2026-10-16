@@ -707,11 +707,18 @@ $('startBtn').addEventListener('click', join);
 const say = (kind, body) => fetch(http('/say'), {method: 'POST', headers: {'content-type': 'text/plain'},
   body: JSON.stringify({kind, name: myName, body})}).then(r => { if (!r.ok) throw new Error(r.status); });
 
-let reports = 0; const reported = new Set();
+// The three is a cap on reports we actually DELIVERED, not on attempts, and that distinction is the
+// whole point: counting attempts meant a server that was briefly unreachable - or the arena's /say
+// guard, which is 30 notes a MINUTE shared by everyone, so a busy launch day hits it - swallowed the
+// first three errors and then refused to report anything for the rest of the visit, having told
+// nobody anything. A failed send now gives its slot back and un-remembers the message, so the next
+// time the same fault fires it is tried again. 'tries' is what stops that becoming a storm: one broken
+// frame fires every tick, so without a ceiling on attempts a dead server would be posted to forever.
+let reports = 0, tries = 0; const reported = new Set();
 function report(what) {
-  if (reports >= 3 || reported.has(what)) return;   // one broken frame fires every tick; we only need to hear it once
-  reported.add(what); reports++;
-  say('err', what).catch(() => {});
+  if (reports >= 3 || tries >= 9 || reported.has(what)) return;   // one broken frame fires every tick
+  reported.add(what); tries++;
+  say('err', what).then(() => reports++, () => reported.delete(what));
 }
 addEventListener('error', e => report((e.message || 'error') + ' @ ' + (e.filename || '?') + ':' + (e.lineno || 0) +
   (e.error && e.error.stack ? ' | ' + e.error.stack.slice(0, 300) : '')));

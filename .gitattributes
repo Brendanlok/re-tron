@@ -4,3 +4,18 @@
 # while git went on reporting the tree clean. Every byte-identity check then disagreed with a page that
 # was perfectly fine. Pin the eol here so a checkout can never produce that again.
 *.html text eol=lf
+
+# manifest.json and favicon.svg are in the itch zip, and the zip check compares all eight files byte
+# for byte - not just index.html, which is what the pin above was written for. So a checkout that
+# rewrote either of those as CRLF would report "stale: manifest.json" about a file that is correct,
+# the same false alarm, one line short of being fixed. The repack itself already forces LF
+# (core.autocrlf=false in the archive command), so the zip side was never the half at risk.
+*.json text eol=lf
+*.svg text eol=lf
+# Not in the zip, but the same class: the suite reads index.html line by line, and nothing in this
+# repo wants CRLF.
+*.mjs text eol=lf
+*.js text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.toml text eol=lf

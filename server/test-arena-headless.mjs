@@ -1079,5 +1079,52 @@ function ride(a, name, y0, kos = 0) {
   await new Promise(r => setTimeout(r, 20));   // a rejection is only unhandled once the microtasks drain
   is(unhandled, 0, 'and a resume() that rejects is swallowed rather than reported as a crash');
 }
+// ---- a crash report that could not be sent must not cost the player the slot it was sent in ----
+// The page gives a player THREE crash notes a visit, and it used to spend one on every attempt rather
+// than on every delivery. So a server that was unreachable for a few seconds, or the arena's own /say
+// guard - 30 notes a minute shared by everyone, which a launch day with twelve riders reaches easily -
+// ate the first three errors and then went quiet for the rest of the visit, having filed nothing. That
+// is the failure the whole report path exists to prevent, and it failed silently, which is the one
+// thing the Snaked lesson beside it says is a blocker. Lifted out of the page rather than restated,
+// and driven with a server that refuses, one that accepts, and one that comes back, so these fail if
+// either half of the fix - giving the slot back, or the ceiling that stops it storming - is taken out.
+{
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const decl = (page.match(/let reports = 0,[^\n]*\n/) || [''])[0];
+  const open = page.indexOf('function report(what) {');
+  const end = page.indexOf('\n}', open);
+  const src = decl && open > 0 && end > open ? decl + page.slice(open, end + 2) : '';
+  assert(src.includes('tries') && src.includes("say('err'"), 'report is lifted out of the page');
+  const drive = () => {
+    let sent = 0, mode = 'fail';
+    const say = () => { sent++; return mode === 'fail' ? Promise.reject(new Error('503')) : Promise.resolve(); };
+    const report = new Function('ctx', 'with (ctx) {' + src + '\nreturn report; }')({say});
+    return {report, sent: () => sent, up: () => { mode = 'ok'; }};
+  };
+  // a server that is down for the whole visit: the three slots are never spent, and the retries stop
+  const down = drive();
+  for (let i = 0; i < 40; i++) { down.report('boom @ x:' + i); await Promise.resolve(); }
+  is(down.sent(), 9, 'a server that refuses every note is tried nine times and then left alone');
+  // the note that mattered arrives the moment the server comes back, instead of being refused for good
+  const back = drive();
+  back.report('the one that matters');
+  await Promise.resolve();
+  is(back.sent(), 1, 'the first error is sent once while the server is down');
+  back.report('the one that matters');
+  await Promise.resolve();
+  is(back.sent(), 2, 'and a note that failed to send is tried again when the same fault fires');
+  back.up();
+  back.report('the one that matters');
+  await Promise.resolve();
+  is(back.sent(), 3, 'and it goes through once the server is back');
+  back.report('the one that matters');
+  await Promise.resolve();
+  is(back.sent(), 3, 'after which it is remembered and never sent twice');
+  // a healthy server still only hears three, so one broken frame cannot flood the player inbox
+  const up = drive();
+  up.up();
+  for (let i = 0; i < 20; i++) { up.report('broken frame @ y:' + i); await Promise.resolve(); }
+  is(up.sent(), 3, 'a player still only ever files three notes a visit');
+}
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
