@@ -963,5 +963,30 @@ function ride(a, name, y0, kos = 0) {
       'and the menu walls fade instead of filling the floor (peak ' + r.mostWalls + ' of 320)');
   }
 }
+// ---- the score a rider is shown while riding is the score the board keeps ----
+// Score is computed in THREE places and nothing has ever checked they agree: the live rider list in
+// the broadcast, the death event the result screen reads, and the row the referee writes to the board.
+// All three say floor(seconds alive) + 10 per knockout today. If one ever drifts the game goes quietly
+// wrong in the one place every player looks - you ride a run shown as 34, the result screen says 34
+// and the board remembers 33 - and no existing check would catch it, because each half is perfectly
+// self-consistent on its own. This is the same two-halves-disagree class as the dimmed BLADE button.
+{
+  const a = arena({board: true});
+  const {b} = rider(a, 'TALLY', 20, 5, 'D');   // down the long axis: 54 cells of room, no blade, no walls
+  b.kos = 2;   // so the knockout half of the sum is pinned too, not just the seconds half
+  // ride to a tick the rider list is actually sent on (every 10th) and far enough in that floor() moved
+  while (a.tick % 10 !== 0 || a.tick - b.start < 30) a.step();
+  const elapsed = a.tick - b.start, want = Math.floor(elapsed / 10) + 10 * b.kos;
+  const row = a.feed.filter(m => m.top).pop().top.find(([n]) => n === 'TALLY');
+  is(row && row[1], want, 'the live rider list scores a run the way the referee does');
+  // the referee's own kill, at a known elapsed count rather than waiting on a lucky crash
+  a.kill(b, 0, 'edge');
+  a.step();   // out.e rides out on the next broadcast
+  const ev = events(a).find(e => e[0] === b.id);
+  is(ev && ev[3], want, 'and the result screen is told that same score');
+  const kept = a.runs[a.runs.length - 1];
+  is(kept && kept[2], want, 'and that is the score the board keeps');
+  is(kept && kept[1], 'TALLY', 'under the name the rider actually used');
+}
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
