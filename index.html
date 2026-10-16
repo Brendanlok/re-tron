@@ -532,12 +532,22 @@ function paint() {
 // ---- sound: short synthesized blips, no audio files (Snaked's approach) ---------------------
 // On by default and remembered. Browsers only allow audio after a tap or a key press, so the engine
 // starts on the first one. The blade is the game, so it gets a held hum rather than a one-shot.
-let actx = null, soundOn = true, hum = null, humWas = false;
+let actx = null, soundOn = true, hum = null, humWas = false, noAudio = false;
 try { soundOn = localStorage.getItem('retron-sound') !== '0'; } catch (e) {}
+// Every other browser API in this file is guarded - localStorage, setPointerCapture, each fetch - and
+// this one was not. Construction throws in some embedded browsers, and actx then stayed null, so the
+// next pointerdown or keydown tried again and threw again, for the whole visit. Two costs, neither of
+// them the missing sound: a console error on every input, and the window error handler below turning
+// the first throw into one of the three crash reports a player ever gets to file. A refused context
+// means no sound, which this game plays perfectly well without; it must not mean a report. resume()
+// is a promise and rejects on its own, which the unhandledrejection handler would have reported too.
 function unlockAudio() {
+  if (noAudio) return;
   const A = window.AudioContext || window.webkitAudioContext;
-  if (!actx && A) actx = new A();
-  if (actx && actx.state === 'suspended') actx.resume();
+  try {
+    if (!actx && A) actx = new A();
+    if (actx && actx.state === 'suspended') actx.resume().catch(() => {});
+  } catch (e) { noAudio = true; }
 }
 addEventListener('pointerdown', unlockAudio, true); addEventListener('keydown', unlockAudio, true);
 function tone(freq, dur, type, vol, slideTo, delay) {

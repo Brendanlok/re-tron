@@ -988,5 +988,45 @@ function ride(a, name, y0, kos = 0) {
   is(kept && kept[2], want, 'and that is the score the board keeps');
   is(kept && kept[1], 'TALLY', 'under the name the rider actually used');
 }
+// ---- a browser that refuses to make an AudioContext must not cost a player a crash report ----
+// Every other browser API the page touches is guarded - localStorage, setPointerCapture, every fetch -
+// and this one was not. unlockAudio is bound to pointerdown AND keydown, so an embedded browser that
+// throws on construction threw on every input for the whole visit, because actx stayed null and the
+// next one tried again. The missing sound is the cheap half: the page's own window error handler turns
+// a throw into one of the THREE crash notes a player ever gets to file, spending it on absent sound the
+// game plays perfectly well without. resume() is a promise and rejects on its own, which the
+// unhandledrejection handler would have reported the same way. Lifted out of the page rather than
+// restated, and driven three ways, so these fail if either guard is taken back out.
+{
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const decl = (page.match(/let actx = null,[^\n]*\n/) || [''])[0];
+  const open = page.indexOf('function unlockAudio() {');
+  const end = page.indexOf('\n}', open);
+  const src = decl && open > 0 && end > open ? decl + page.slice(open, end + 2) : '';
+  assert(src.includes('noAudio') && src.includes('new A()'), 'unlockAudio is lifted out of the page');
+  let unhandled = 0;
+  process.on('unhandledRejection', () => unhandled++);
+  const drive = mode => {
+    let built = 0, resumed = 0, escaped = null;
+    function Ctx() {
+      built++;
+      if (mode === 'throw') throw new Error('audio is not allowed here');
+      this.state = 'suspended';   // never becomes 'running', so resume() is attempted on every call
+      this.resume = () => { resumed++; return mode === 'reject' ? Promise.reject(new Error('no')) : Promise.resolve(); };
+    }
+    const unlock = new Function('ctx', 'with (ctx) {' + src + '\nreturn unlockAudio; }')({window: {AudioContext: Ctx}});
+    for (let i = 0; i < 5; i++) { try { unlock(); } catch (e) { escaped = e; } }
+    return {built, resumed, escaped};
+  };
+  const no = drive('throw');
+  is(no.escaped, null, 'a browser that throws on AudioContext never throws out of an input handler');
+  is(no.built, 1, 'and it is asked once rather than on every tap for the rest of the visit');
+  const ok = drive('ok');
+  is(ok.built, 1, 'a browser that allows audio still gets exactly one context');
+  is(ok.resumed, 5, 'and a context left suspended is still resumed on every input');
+  drive('reject');
+  await new Promise(r => setTimeout(r, 20));   // a rejection is only unhandled once the microtasks drain
+  is(unhandled, 0, 'and a resume() that rejects is swallowed rather than reported as a crash');
+}
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
