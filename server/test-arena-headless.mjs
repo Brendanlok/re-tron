@@ -458,6 +458,57 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   assert(!b.alive, 'a bike that is told nonsense still dies at the edge like any other');
 }
 
+// ---- the rules the turn gate itself enforces: no reversal, no no-op, and a queue that cannot flood ----
+// The steering rule the whole game rests on, and it had never been checked. A reversal has to be
+// refused or the blade makes the game unplayable: flip 180 with the blade out and the bike's next
+// move is into the barricade it laid on the cell behind it, so one stray tap would be an instant
+// death with nothing on screen to explain it.
+{
+  const a = arena();
+  const {b, say} = rider(a, 'LOK', 20, 30, 'R');
+  say({t: 'turn', d: 'L'});
+  is(b.queue.length, 0, 'a straight reversal is refused at the door');
+  say({t: 'turn', d: 'R'});
+  is(b.queue.length, 0, 'and so is a tap for the heading the bike already has');
+  say({t: 'turn', d: 'D'}); say({t: 'turn', d: 'L'}); say({t: 'turn', d: 'U'});
+  is(b.queue.length, 2, 'the queue holds two taps and refuses the third');
+  a.step();
+  is(b.dir, 'D', 'so the bike takes the first tap, not the one it refused');
+}
+
+// ---- two turns inside one tick: one is taken, the other waits ----
+// The reversal rule is enforced TWICE, against two different things, and nothing checked they agree.
+// onMsg validates a tap against the TAIL OF THE QUEUE (the bike's heading only when it is empty);
+// step() validates again against the bike's LIVE heading as it drains. Both are needed and neither is
+// enough on its own: the gate cannot know what the heading will be two ticks from now, and the drain
+// cannot know which tap the player made first. A player tapping down-then-left inside one 100ms tick
+// passes the gate twice over, because L is not the reverse of D - so if step() ever drained the whole
+// queue in one tick the bike would end that tick heading L one cell on from where it started, which
+// is the cell it had just come from. With the blade out that is its own barricade. The `break` in the
+// drain loop is the only thing standing there, so it is checked from all four headings and both ways round.
+{
+  const a = arena();
+  const DELTA = {U: [0, -1], D: [0, 1], L: [-1, 0], R: [1, 0]};
+  for (const [d0, first, second] of [['R', 'D', 'L'], ['R', 'U', 'L'], ['L', 'D', 'R'], ['L', 'U', 'R'],
+                                     ['U', 'L', 'D'], ['U', 'R', 'D'], ['D', 'L', 'U'], ['D', 'R', 'U']]) {
+    const {b, say} = rider(a, 'LOK', 20, 30, d0);
+    const behind = [20 - DELTA[d0][0], 30 - DELTA[d0][1]];   // the cell it rode in from
+    say({t: 'turn', d: first});
+    say({t: 'turn', d: second});
+    is(b.queue.length, 2, d0 + ': both taps are held, ' + first + ' then ' + second);
+    a.step();
+    is(b.dir, first, d0 + ': the tick takes only the first tap');
+    is(b.queue.length, 1, d0 + ': and the second is still waiting for the next tick');
+    assert(b.x !== behind[0] || b.y !== behind[1],
+      d0 + ': the bike never rides back into the cell it came from (' + b.x + ',' + b.y + ')');
+    a.step();
+    is(b.dir, second, d0 + ': the second tap lands one tick later');
+    assert(b.x !== behind[0] || b.y !== behind[1], d0 + ': still clear of the cell behind it');
+    a.bikes.delete(b.id); a.socks.delete(b.sock);
+  }
+}
+
+
 // ---- clearing the board ----
 // The only way a bad run ever comes off the board, so both halves are checked: the door, and the delete.
 {
