@@ -113,7 +113,7 @@ All four verdicts are asserted offline by `python preflight.py --self-check`.
 | `shot-0-menu.png` | The menu at phone width (1000x2080, 2x). Under itch's 2160px limit. |
 | `shot-1-arena-phone.png` | Mid-run on a phone: six bikes, your ribbon curling back under you, one rider heading straight at it. Shows the arrow pad and the BLADE button. |
 | `shot-2-knockout-phone.png` | The moment a rival rides into your wall and derezzes into tumbling cubes. Strongest single image. |
-| `shot-3-arena-wide.png` | 1280x720 on a computer, keyboard HUD. Good for a page header. |
+| `shot-3-arena-wide.png` | 1280x720 on a computer, keyboard HUD. Good for a page header. **Retaken 17 Oct and regenerable: `python press/make-wide-shot.py`.** The first one was shot on 30 Sep, the day before the camera changed, so it showed the arena floating in black down both sides — a layout the game no longer has. If the look of the arena ever changes again, run that script rather than trusting this file. |
 
 ## Repacking the zip
 
