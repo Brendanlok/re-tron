@@ -1,7 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- The home-screen icon redrawn bold for a 16px tab: the cyan ribbon turning a corner into the bike's white nose. -->
+  <!-- The home-screen icon redrawn bold for a 16px tab: the cyan ribbon turning a corner into the
+       bike's white nose. The machine is the game's dart - blunt tail, swept flanks, a needle nose
+       burning white - not the pill it was until 17 Oct. The PNG icons come out of the page itself
+       (press/make-icons.py); this one is by hand, so it changes by hand when the bike does. -->
   <rect width="32" height="32" rx="7" fill="#0a0e14"/>
-  <path d="M7 24V13H17" fill="none" stroke="#57d3ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="17" y="10" width="11" height="6" rx="3" fill="#1a2a3c"/>
-  <rect x="22" y="11" width="6" height="4" rx="2" fill="#ffffff"/>
+  <path d="M7 24V13H16" fill="none" stroke="#57d3ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M16.2 9.9 24 11.4 29.6 13 24 14.6 16.2 16.1Z" fill="#131c2a" stroke="#57d3ff" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M30.4 13 24.6 11.6 24.6 14.4Z" fill="#ffffff"/>
 </svg>
