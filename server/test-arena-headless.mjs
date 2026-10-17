@@ -1277,5 +1277,35 @@ function ride(a, name, y0, kos = 0) {
   is(bust.tickAt, 111,
     'but it leaves the clock untouched, so ticks the page cannot apply read as the dropped connection they amount to');
 }
+// ---- the sizes the page and the manifest DECLARE for the shipped images must be the real ones ----
+// og.png and the four icons were every one regenerated today, by scripts written today, out of the
+// page's own cycle() - which put right a card and five icons that had been drawing the bike from
+// before the redesign for three and a half weeks. What nothing checks is the half that is WRITTEN
+// DOWN rather than drawn: index.html tells every link preview the card is 1200x630, and manifest.json
+// tells a launcher each icon is whatever its sizes field says. Those are claims about a file, exactly
+// like the balance numbers pinned above, and they go stale the same silent way - a canvas size changed
+// in press/make-og.py or press/make-icons.py leaves the declaration lying, both files still look
+// perfectly good on their own, and the game plays correctly throughout. The cost lands where it can
+// least be taken back: a scraper that trusts the meta tags crops or letterboxes the one image of this
+// game that travels on its own, into a Reddit post and a chat preview, in front of people who have not
+// clicked anything yet; a launcher handed a wrong size picks the wrong icon or refuses it. Read out of
+// the PNG header, so it is the FILE that answers here and never the script that wrote it.
+{
+  const png = f => {
+    const b = readFileSync(new URL('../' + f, import.meta.url));
+    return b.readUInt32BE(16) + 'x' + b.readUInt32BE(20);
+  };
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const meta = p => (page.match(new RegExp('og:image:' + p + '" content="([0-9]+)')) || [])[1];
+  is(png('og.png'), meta('width') + 'x' + meta('height'),
+    'og.png is really the size index.html tells every link preview it is');
+  const icons = JSON.parse(readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')).icons;
+  is(icons.length, 4, 'the manifest still ships four icons');
+  // four DISTINCT ones: a size check alone passes a manifest that lists one icon twice, and writing one
+  // scale over another is a fault this project has actually had - make-icons.py gave both maskable
+  // scales the same probe filename on 17 Oct and produced two pixel-identical files
+  is(new Set(icons.map(i => i.src)).size, 4, 'and four different files, not one of them listed twice');
+  for (const {src, sizes} of icons) is(png(src), sizes, src + ' is really the size manifest.json says it is');
+}
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
