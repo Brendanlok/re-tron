@@ -390,7 +390,19 @@ function onMsg(m) {
     if (m.on) $('live').textContent = m.on + (m.on === 1 ? ' rider' : ' riders') + ' in the arena now';
   } else if (m.t === 'k') {
     const was = drawT();   // how far along the last step each bike is drawn, before the clock restarts
-    tick = m.k; tickAt = performance.now();
+    // Held, not committed yet. The quiet-arena watch below reads tickAt, so whatever sets it is what
+    // the watch is really measuring - and setting it HERE made that "a tick message arrived", not "a
+    // tick was applied". Those come apart in exactly the case the watch exists for: a throw anywhere
+    // in the work below escapes this handler, the socket carries on and delivers the next tick 100ms
+    // later, which throws in the same place, for ever. The board is frozen and the watch is perfectly
+    // satisfied, because the failing handler refreshed the clock on its way in. The page's own error
+    // handler files ONE crash report (the rest are deduped), and the rider is left on a dead picture
+    // with no score and no way back to the menu but a reload - the precise outcome the watch was
+    // written to prevent. Commit it on the last line instead, so a tick the page could not apply
+    // counts as the dropped connection it amounts to. Arrival time is what gets stored either way:
+    // drawT() interpolates against it and must not gain the handler's own running time.
+    const at = performance.now();
+    tick = m.k;
     for (const [id, n, bot] of m.n || []) names.set(id, {n, bot});
     const seen = new Set();
     for (const b of m.b) { setBike(b, was); seen.add(b[0]); }
@@ -407,6 +419,7 @@ function onMsg(m) {
     if (m.top) paintBoard(m.top);
     if (m.on !== undefined) $('live').textContent = m.on + (m.on === 1 ? ' rider' : ' riders') + ' in the arena now';
     paint();
+    tickAt = at;   // the tick is applied: only now has the arena been heard from
   }
 }
 // Each step starts from where the bike is drawn right now, not from its last cell. On a phone ticks land

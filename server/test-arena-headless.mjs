@@ -1231,5 +1231,51 @@ function ride(a, name, y0, kos = 0) {
     assert(new RegExp(want, 'i').test(copy[file]), file + ' says ' + rule + ' ("' + want + '")');
   }
 }
+// ---- a tick the page could not apply must not pass for an arena that is running ----
+// The quiet-arena watch above is the only thing between a frozen board and a rider staring at it, and
+// everything it knows comes from tickAt. So what sets tickAt is what the watch is actually measuring,
+// and setting it on the FIRST line of the tick branch made it "a tick message arrived" rather than "a
+// tick was applied". Those two come apart in precisely the case the watch exists for. A throw anywhere
+// in applying a tick escapes onMsg; the socket is untouched and delivers the next tick 100ms later,
+// which throws in the same place, for ever. The board stops moving, the watch is refreshed ten times a
+// second by the very handler that is failing, and it never fires - so the rider gets no score, no
+// result screen and no way back to the menu but a reload, which is the exact outcome the watch was
+// written to prevent. The page's error handler files one crash report and dedupes the rest, so it is
+// quiet after the first. Driven here verbatim out of index.html, the same way the watch itself is: a
+// clean tick must set the clock and a failed one must leave it alone. The second half of that goes RED
+// on its own if the assignment is ever moved back up to the top of the branch.
+{
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const open = page.indexOf('function onMsg(m) {');
+  const end = page.indexOf('// Each step starts from where the bike is drawn', open);
+  const src = open > 0 && end > open ? page.slice(open, end) : '';
+  assert(src.includes("m.t === 'k'") && src.includes('tickAt'),
+    'the page applies the arena tick in onMsg, against the clock the quiet-arena watch reads');
+  // everything the tick branch touches, stubbed; the other branches are never entered, so the page's
+  // own W, H, riding and the rest are not needed here
+  const build = () => {
+    const ctx = {
+      tick: 0, tickAt: 111, pend: [], pendAt: 0, me: 9, WALL_TICKS: 80, reached: false,
+      bikes: new Map(), walls: new Map(), names: new Map(),
+      performance: {now: () => 999},
+      drawT: () => 0, setBike: () => {}, paintBoard: () => {}, paint: () => {},
+      $: () => ({textContent: '', classList: {toggle() {}}}),
+      onOut() { ctx.reached = true; throw new Error('a throw while applying the tick'); },
+    };
+    ctx.apply = src ? new Function('ctx', 'with (ctx) {' + src + '\nreturn onMsg; }')(ctx) : () => {};
+    return ctx;
+  };
+  const good = build();
+  good.apply({t: 'k', k: 4, b: []});
+  is(good.tick, 4, 'a tick the page applied cleanly moves the page onto that tick');
+  is(good.tickAt, 999, 'and sets the clock the quiet-arena watch reads');
+  const bust = build();
+  let threw = false;
+  try { bust.apply({t: 'k', k: 5, b: [], e: [[1, 0, 'edge', 3, 30, 0]]}); } catch (e) { threw = true; }
+  is(threw, true, 'a fault while applying a tick still escapes the handler, as it always did');
+  is(bust.reached, true, 'and the fault really was reached, rather than the message being skipped');
+  is(bust.tickAt, 111,
+    'but it leaves the clock untouched, so ticks the page cannot apply read as the dropped connection they amount to');
+}
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
