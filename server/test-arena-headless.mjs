@@ -509,6 +509,65 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
 }
 
 
+// ---- the SAME turn rule is enforced in a THIRD place, and it is the one the player's thumb hits ----
+// The two checks above are both the referee's: onMsg at the door, step() as the queue drains. The page
+// keeps its own copy of the identical rule - no reversal, no tap for the heading you already have, and
+// never more than two waiting - and refuses a tap before it ever reaches the wire. That copy is why
+// steering feels instant, and it is also the one that can drift unnoticed: if the page let a tap
+// through that the referee then refuses, the bike simply does not turn and nothing on screen says why,
+// and if the page refuses one the referee would have taken, the player loses a turn they earned. Both
+// are silent. So the page's own turn() is lifted out of index.html and asked the same question as the
+// real referee for every heading, every queue it could be holding, and every tap.
+{
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const open = page.indexOf('function turn(d) {');
+  const body = open > 0 ? page.slice(page.indexOf('{', open) + 1, page.indexOf('\n}', open)) : '';
+  assert(body.includes('pend') && body.includes("send({t: 'turn'"),
+    'the page keeps its own copy of the turn rule, refused before it reaches the wire');
+  // does the PAGE put this tap on the wire? run its real body, with a stand-in for everything it touches
+  const pageSends = (src, dir, queued, d) => {
+    const run = new Function('ctx', 'd', 'with (ctx) {' + src + '}');
+    const sent = [];
+    run({riding: true, tick: 7, pendAt: 0, pend: [...queued], me: 1, bikes: new Map([[1, {d: dir}]]),
+      BACK: {U: 'D', D: 'U', L: 'R', R: 'L'}, SFX: {turn() {}}, send: m => sent.push(m)}, d);
+    return sent.length > 0;
+  };
+  // and would the REFEREE have queued it? the real onMsg, holding the same queue
+  const refQueues = (dir, queued, d) => {
+    const a = arena();
+    const {b, say} = rider(a, 'LOK', 20, 30, dir);
+    b.queue = [...queued];
+    say({t: 'turn', d});
+    return b.queue.length > queued.length;
+  };
+  const DD = ['U', 'D', 'L', 'R'];
+  const everyCase = f => {
+    const out = [];
+    for (const dir of DD) for (const q of [[], ...DD.map(p => [p]), ...DD.flatMap(p => DD.map(r => [p, r]))])
+      for (const d of DD) out.push(f(dir, q, d));
+    return out;
+  };
+  const disagree = src => everyCase((dir, q, d) =>
+    pageSends(src, dir, q, d) === refQueues(dir, q, d) ? null : dir + ' holding [' + q + '] tapped ' + d)
+    .filter(Boolean);
+  const drift = disagree(body);
+  is(drift.length, 0, 'the page and the referee agree on every tap, from every heading, on every queue'
+    + (drift.length ? ' - ' + drift.slice(0, 3).join('; ') : ' (' + everyCase(() => 1).length + ' cases)'));
+  // the four rules named one at a time, so a failure above says which one moved
+  is(pageSends(body, 'R', [], 'U'), true, 'a clean turn goes to the wire');
+  is(pageSends(body, 'R', [], 'L'), false, 'a reversal never leaves the page');
+  is(pageSends(body, 'R', [], 'R'), false, 'nor does a tap for the heading the bike already has');
+  is(pageSends(body, 'R', ['U', 'L'], 'D'), false, 'and nor does a third tap on a full queue');
+  // and the comparison CATCHES a drift rather than merely agreeing with today's code: break each rule
+  // in the lifted copy in turn and the page must then be caught letting through what the referee refuses
+  for (const [was, now, what] of [['d === BACK[last]', 'false', 'the reversal rule'],
+                                  ['if (d === last) return true;', '', 'the no-op rule'],
+                                  ['pend.length >= 2', 'false', 'the two-tap cap']])
+    assert(body.includes(was) && disagree(body.replace(was, now)).length > 0,
+      'dropping ' + what + ' from the page is caught by this check');
+}
+
+
 // ---- clearing the board ----
 // The only way a bad run ever comes off the board, so both halves are checked: the door, and the delete.
 {
