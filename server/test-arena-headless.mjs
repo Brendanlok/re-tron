@@ -1185,5 +1185,51 @@ function ride(a, name, y0, kos = 0) {
   for (let i = 0; i < 20; i++) { up.report('broken frame @ y:' + i); await Promise.resolve(); }
   is(up.sent(), 3, 'a player still only ever files three notes a visit');
 }
+// ---- the numbers in the public post must be the numbers the referee actually plays by ----
+// press/launch-copy.md and press/itch-description.txt are not notes to ourselves: they are the words
+// that go on itch and into a Reddit post, read by people who have not played yet, and they state the
+// balance of this game as fact - three seconds of blade, six to recharge, walls for eight, six bikes,
+// ten a knockout. Every one of those is a constant at the top of the referee, so one tuning edit turns
+// the announcement into a lie that nothing on either side would notice: the game would play correctly
+// and the post would describe a game that no longer exists. That is the same fault already found four
+// times in the launch kit this month - a press shot one day older than a camera change, og.png and all
+// five icons still drawing the bike from before the redesign, a demo clip sold with a cyan rider that
+// was never in it - and every one of them was found by somebody looking, never by a check. The numbers
+// are the half that can be pinned, so they are pinned here. Proved to DISCRIMINATE rather than merely
+// agree with today's copy: each of the five constants was bent by one, and each time both files were
+// caught. Prose is matched with whitespace flattened, because 'three seconds\nof blade' is the same
+// claim as 'three seconds of blade' and a line re-wrap must never read as the copy having gone stale.
+{
+  const src = readFileSync(new URL('./src/index.js', import.meta.url), 'utf8');
+  const num = k => Number((src.match(new RegExp(k + ' = ([0-9]+)')) || [])[1]);
+  const secs = k => num(k) * num('TICK_MS') / 1000;
+  // the per-second half of the score is the coefficient on Math.floor(secs), and the copy calls it one
+  // point a second. If that expression ever stops being a bare floor plus a flat rate, the sentence
+  // needs rewriting by hand - so the match not holding IS the finding, not a broken test
+  const ko = src.match(/score = Math[.]floor[(]secs[)] [+] ([0-9]+) [*] b[.]kos/);
+  assert(ko, 'the score rule is still one point a second alive plus a flat rate per knockout');
+  const WORD = {1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six',
+    7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten', 11: 'eleven', 12: 'twelve'};
+  const flat = f => readFileSync(new URL('../press/' + f, import.meta.url), 'utf8').replace(/\s+/g, ' ');
+  const copy = {'launch-copy.md': flat('launch-copy.md'), 'itch-description.txt': flat('itch-description.txt')};
+  const blade = secs('BLADE_TICKS'), recharge = secs('RECHARGE_TICKS'), wall = secs('WALL_TICKS');
+  const target = num('TARGET'), perKo = ko ? Number(ko[1]) : 0;
+  const claims = [
+    ['the blade lasts ' + blade + 's', 'launch-copy.md', 'about $ seconds of blade', blade],
+    ['the blade lasts ' + blade + 's', 'itch-description.txt', 'about $ seconds of blade', blade],
+    ['recharging takes ' + recharge + 's', 'launch-copy.md', '$ seconds to recharge', recharge],
+    ['recharging takes ' + recharge + 's', 'itch-description.txt', '$ seconds to get it back', recharge],
+    ['a wall stands for ' + wall + 's', 'launch-copy.md', 'fade after $ seconds', wall],
+    ['a wall stands for ' + wall + 's', 'itch-description.txt', 'fade after $ seconds', wall],
+    ['bots top the arena up to ' + target + ' bikes', 'launch-copy.md', 'arena at $ bikes', target],
+    ['bots top the arena up to ' + target + ' bikes', 'itch-description.txt', 'arena at $ bikes', target],
+    ['a knockout is worth ' + perKo, 'launch-copy.md', '$ a knockout', perKo],
+    ['a knockout is worth ' + perKo, 'itch-description.txt', '$ a knockout', perKo],
+  ];
+  for (const [rule, file, phrase, value] of claims) {
+    const want = phrase.replace('$', WORD[value] || '(' + value + ' - no word for it)');
+    assert(new RegExp(want, 'i').test(copy[file]), file + ' says ' + rule + ' ("' + want + '")');
+  }
+}
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
