@@ -1410,5 +1410,78 @@ function ride(a, name, y0, kos = 0) {
     'along with the ticks either side of it that were only a shade brighter than the floor');
 }
 
+
+// ---- the standings on a rider's first frame are this arena's, not the last run's ----
+// The corner panel is the one thing on screen that names the other riders, and the broadcast only
+// carries it on every tenth tick - so a rider who joins on any other tick had it un-hidden still
+// holding the rows of their PREVIOUS run, for up to 900ms measured here. That is not merely stale:
+// showResult hangs up, a solo rider's socket is then the last one, and the arena's stop() calls
+// reset(), which puts nextId back to 1 - so a dead row from the old arena can carry the new rider's
+// own id and light up in cyan as him, wearing a finished rider's score. Exactly the bug fixed on
+// 18 Oct (both LOKs highlighted by name), coming back through a door the id fix does not cover.
+// Fixed by sending the standings with the 'you' message, which the arena already sends to that one
+// socket, and painting them before the panel is shown.
+{
+  const a = arena();
+  rider(a, 'AAA', 10, 10, 'R');
+  rider(a, 'BBB', 30, 40, 'L');
+  for (let i = 0; i < 25; i++) a.step();
+  assert(a.nextId > 1, 'ids climb while an arena is up');
+  a.stop();
+  is(a.nextId, 1, 'and go back to 1 when the last socket goes, so a dead row can carry a live id');
+
+  const c = arena();
+  rider(c, 'AAA', 10, 10, 'R');
+  rider(c, 'BBB', 30, 40, 'L');
+  while (c.tick % 10 !== 1) c.step();          // join on a tick the broadcast does NOT carry standings on
+  const got = [];
+  const s = {ws: {send: t => got.push(JSON.parse(t))}, bike: null, count: 0, windowAt: Date.now(), idle: 0};
+  c.socks.add(s);
+  c.onMsg(s, JSON.stringify({t: 'join', name: 'NEW'}));
+  for (let i = 0; i < 200 && s.waiting !== undefined; i++) c.trySpawn(s);
+  const you = got.find(m => m.t === 'you');
+  assert(you, 'a rider joining mid-second is told where they were dropped');
+  assert(you && you.top, 'and the standings come with it, rather than waiting for the next broadcast');
+  const alive = new Set([...c.bikes.keys()]);
+  assert(you && you.top.every(([, , , id]) => alive.has(id)),
+    'every row names a bike riding in this arena right now');
+  assert(you && you.top.some(([, , , id]) => id === you.id), 'the new rider is on it, so the panel can mark him');
+  // and the window the fix closes is real: count the ticks the broadcast would have left it unpainted
+  let wait = 0;
+  for (;;) { got.length = 0; c.step(); wait++; if (got.some(m => m.top) || wait > 20) break; }
+  assert(wait >= 5, 'the broadcast alone would have left the panel unpainted for ' + wait * 100 + 'ms');
+
+  // the PAGE's half, driven out of index.html: the panel must be painted before it is un-hidden
+  const pg = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const open = pg.indexOf('function onMsg(m) {');
+  const end = pg.indexOf('// Each step starts from where the bike is drawn', open);
+  const src = open > 0 && end > open ? pg.slice(open, end) : '';
+  assert(src.includes("m.t === 'you'"), 'the page takes its seat in onMsg');
+  const run = msg => {
+    const log = [];
+    const ctx = {
+      W: 40, H: 60, me: 0, tick: 7, myStart: 0, pend: [], myKos: 0, bladeOn: false, riding: false,
+      WALL_TICKS: 80, TICK_MS: 100, isTouch: false, walls: new Map(), bikes: new Map(), names: new Map(),
+      performance: {now: () => 1}, setBike: () => {}, paint: () => {}, hangUp: () => {},
+      paintBoard: top => log.push(['paint', top]),
+      $: id => ({set hidden(v) { if (id === 'board' && v === false) log.push(['show']); },
+                 textContent: '', classList: {toggle() {}}}),
+    };
+    ctx.apply = src ? new Function('ctx', 'with (ctx) {' + src + ';return onMsg; }')(ctx) : () => {};
+    ctx.apply(msg);
+    return log;
+  };
+  const log = run({t: 'you', id: you.id, b: [you.id, 10, 10, 0, 0, 100], top: you.top});
+  const painted = log.findIndex(e => e[0] === 'paint'), shown = log.findIndex(e => e[0] === 'show');
+  assert(painted >= 0, 'the page paints the standings it was handed');
+  assert(painted >= 0 && shown > painted, 'and does it before the panel is shown, so no stale frame reaches the screen');
+  assert(painted >= 0 && log[painted][1] === you.top, 'with the rows the arena sent, not a guess');
+  // red against the old rule: with no standings on the message the panel went up unpainted, which is
+  // what left the last run's rows - and a reused id highlighted as you - on screen for up to 900ms
+  const bare = run({t: 'you', id: you.id, b: [you.id, 10, 10, 0, 0, 100]});
+  assert(!bare.some(e => e[0] === 'paint') && bare.some(e => e[0] === 'show'),
+    'and a "you" with no standings on it - the message this replaced - really did show the panel unpainted');
+}
+
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);

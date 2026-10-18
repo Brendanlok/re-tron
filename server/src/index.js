@@ -146,7 +146,11 @@ export class Arena {
     // where, not just who: the page hides the menu the moment this lands, and without a position it
     // has no bike to put the camera on until the next tick - so the first tenth of a second of every
     // run was the whole arena at menu zoom, then a hard snap onto a bike that had appeared from nowhere
-    this.send(s, {t: 'you', id: b.id, b: this.pack(b)});
+    // and the standings, because the broadcast only carries them once a second: joining on any other
+    // tick left the corner panel showing the LAST run's rows for up to 900ms - and the arena resets its
+    // ids to 1 whenever the last socket goes, so one of those dead rows could carry the new rider's own
+    // id and light up as him, which is the name-matching bug of 18 Oct coming back through staleness.
+    this.send(s, {t: 'you', id: b.id, b: this.pack(b), top: this.topRows()});
   }
 
   drop(s) {
@@ -346,12 +350,7 @@ export class Arena {
     const msg = {t: 'k', k: this.tick, b: [...this.bikes.values()].map(b => this.pack(b))};
     for (const f of ['a', 'c', 'e', 'n']) if (this.out[f].length) msg[f] = this.out[f];
     if (this.tick % 10 === 0) {
-      // the id goes with the name, because nothing stops two riders typing the same one: the page used
-      // to find itself in this list by NAME, so both LOKs lit up as you and the stranger's score sat on
-      // top of your own. Appended last, so a page served from cache mid-deploy reads the first three
-      // fields exactly as before.
-      msg.top = [...this.bikes.values()].map(b => [b.name, Math.floor((this.tick - b.start) / 10) + 10 * b.kos, b.bot ? 1 : 0, b.id])
-        .sort((a, b) => b[1] - a[1]).slice(0, 5);
+      msg.top = this.topRows();
       msg.on = [...this.bikes.values()].filter(b => !b.bot).length;
     }
     this.out = {a: [], c: [], e: [], n: []};
@@ -363,6 +362,14 @@ export class Arena {
     this.owner[c] = id; this.born[c] = this.tick;
     this.walls.push([c, this.tick]);
     this.out.a.push([c, id]);
+  }
+  // The standings the corner of the arena shows. The id goes with the name, because nothing stops two
+  // riders typing the same one: the page used to find itself in this list by NAME, so both LOKs lit up
+  // as you and the stranger's score sat on top of your own. Appended last, so a page served from cache
+  // mid-deploy reads the first three fields exactly as before.
+  topRows() {
+    return [...this.bikes.values()].map(b => [b.name, Math.floor((this.tick - b.start) / 10) + 10 * b.kos, b.bot ? 1 : 0, b.id])
+      .sort((a, b) => b[1] - a[1]).slice(0, 5);
   }
   pack(b) { return [b.id, b.x, b.y, DI[b.dir], b.blade ? 1 : 0, Math.round(b.charge * 100 / FULL)]; }
 

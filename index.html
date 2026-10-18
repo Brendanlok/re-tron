@@ -374,6 +374,11 @@ function onMsg(m) {
     me = m.id; riding = true; myStart = tick; pend = []; myKos = 0; bladeOn = false;
     tickAt = performance.now();   // the quiet-arena watch starts now, not at the menu's last pretend tick
     if (m.b) setBike(m.b);   // the arena says where it dropped you, so the first frame is already your bike
+    // and the standings go up with it. The tick only carries them once a second, so the corner panel was
+    // un-hidden still holding the LAST run's rows - and since the arena resets its ids to 1 when the last
+    // socket goes, a dead row could carry your new id and light up in cyan as you, with a finished
+    // rider's score on it. Paint it before it is shown, so the first thing seen is this arena's.
+    if (m.top) paintBoard(m.top);
     paint();
     $('overlay').hidden = true; $('hud').hidden = $('board').hidden = $('hint').hidden = false;
     $('blade').hidden = $('pad').hidden = !isTouch;   // on a computer the space bar is the blade
