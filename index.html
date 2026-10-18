@@ -647,7 +647,7 @@ function blade(on) { if (!riding) return; bladeOn = on; send({t: 'blade', on}); 
 const KEYS = {ArrowUp: 'U', ArrowDown: 'D', ArrowLeft: 'L', ArrowRight: 'R', w: 'U', s: 'D', a: 'L', d: 'R', W: 'U', S: 'D', A: 'L', D: 'R'};
 addEventListener('keydown', e => {
   // with the tell-us box open every key belongs to the textarea, not to the bike
-  if (!$('sayBox').hidden) { if (e.key === 'Escape') $('sayBox').hidden = true; return; }
+  if (!$('sayBox').hidden) { if (e.key === 'Escape') closeSay(); return; }
   if (e.target === $('nameIn') && e.key !== 'Enter') return;
   if (KEYS[e.key]) { e.preventDefault(); turn(KEYS[e.key]); return; }
   if (e.key === ' ') {
@@ -752,17 +752,26 @@ addEventListener('error', e => report((e.message || 'error') + ' @ ' + (e.filena
 addEventListener('unhandledrejection', e => report('unhandled: ' +
   String((e.reason && e.reason.stack) || e.reason).slice(0, 300)));
 
+// The thank-you leaves the box up for 1.4s so it can be read, then shuts it. That timer outlived the
+// box: a player with a second thing to say — and one broken run usually produces two — reopened inside
+// that second and a half, started typing, and had the box shut itself and throw the half-typed note
+// away. Send was dead for that moment too, since the same timer is what re-enables it. Every way the
+// box closes now goes through one place that cancels the pending shut and hands back a usable Send,
+// so reopening always gets a fresh box. This is the only channel a player has for telling us anything.
+let shutSay = 0;
+function closeSay() { clearTimeout(shutSay); $('sayBox').hidden = true; $('saySend').disabled = false; }
 $('sayBtn').addEventListener('click', () => {
+  clearTimeout(shutSay); $('saySend').disabled = false;
   $('sayBox').hidden = false; $('sayMsg').textContent = ''; $('sayMsg').classList.remove('bad'); $('sayTx').focus();
 });
-$('sayCancel').addEventListener('click', () => { $('sayBox').hidden = true; });
+$('sayCancel').addEventListener('click', closeSay);
 $('saySend').addEventListener('click', () => {
   const t = $('sayTx').value.trim();
   if (!t) { $('sayMsg').textContent = 'Say something first.'; $('sayMsg').classList.add('bad'); return; }
   $('saySend').disabled = true; $('sayMsg').classList.remove('bad'); $('sayMsg').textContent = 'Sending…';
   say('say', t).then(() => {
     $('sayTx').value = ''; $('sayMsg').textContent = 'Got it — thank you.';
-    setTimeout(() => { $('sayBox').hidden = true; $('saySend').disabled = false; }, 1400);
+    shutSay = setTimeout(closeSay, 1400);
   }).catch(() => {
     $('sayMsg').textContent = 'Could not send. Try again in a moment.';
     $('sayMsg').classList.add('bad'); $('saySend').disabled = false;
