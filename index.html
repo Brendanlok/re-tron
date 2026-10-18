@@ -902,7 +902,17 @@ function draw() {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   const groups = new Map();
   for (const [c, w] of walls) {
-    const age = tick - w.born + t, a = age > WALL_TICKS - 20 ? Math.max(0, (WALL_TICKS - age) / 20) : 1;
+    // A wall kills right up until the referee drops it, and the referee drops it on the tick its age
+    // reaches WALL_TICKS - so at every age before that it has to be something the rider can SEE. The
+    // fade used to run all the way down to nothing. Measured against the real referee (a wall is lethal
+    // at ages 1 to 79 of 80), the last three lethal ticks drew at 12%, 12% and 0% of full brightness -
+    // the last one literally invisible, because the eight-step rounding just below takes 5% to zero -
+    // and the two before it at 6% stroke on a floor that is already #0d1420. A bike covers a cell a
+    // tick, so a rider could ride through three cells of a wall that was not on his screen and derez on
+    // what looked like bare floor, which is the one death a player cannot be told anything about. It
+    // fades to a floor now and vanishes when it actually stops killing - the only moment the picture
+    // and the referee can honestly agree on.
+    const age = tick - w.born + t, a = age > WALL_TICKS - 20 ? Math.max(0.35, (WALL_TICKS - age) / 20) : 1;
     if (a <= 0) continue;
     const step = Math.round(a * 8), key = w.o + '|' + step;
     let g = groups.get(key);

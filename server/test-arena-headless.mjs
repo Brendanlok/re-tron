@@ -1347,5 +1347,68 @@ function ride(a, name, y0, kos = 0) {
   is(new Set(icons.map(i => i.src)).size, 4, 'and four different files, not one of them listed twice');
   for (const {src, sizes} of icons) is(png(src), sizes, src + ' is really the size manifest.json says it is');
 }
+// ---- a wall that still kills must still be visible ----
+// The referee and the page keep two halves of one fact: the referee decides how long a barricade kills
+// for, the page decides how long it is drawn for, and nothing had ever checked that the second covers
+// the first. It did not. The fade ran linearly to NOTHING over the last 2s, so measured against the
+// real referee the last three lethal ticks of every wall drew at 12%, 12% and 0% of full brightness -
+// a 6% stroke on a #0d1420 floor, then literally nothing, while killing anyone who touched them. A bike
+// moves a cell a tick, so a rider could cross three cells of a wall that was not on his screen and die
+// on what looked like bare floor. Silent in the way that counts: the arena plays perfectly, the referee
+// is right, and the only thing wrong is what the player can see. The lethal window here is MEASURED off
+// the referee rather than read off WALL_TICKS, so a change to how walls expire has to keep the drawing
+// honest too. Proved to discriminate: the same sweep run against the old no-floor expression must find
+// a lethal tick drawn at zero.
+{
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const fadeExpr = page.match(/const age = tick - w\.born \+ t, a = [^\n]+;/);
+  const stepExpr = page.match(/const step = Math\.round\(a \* ([0-9]+)\)/);
+  assert(!!fadeExpr, 'the page fades a barricade on that cell\'s own age');
+  assert(!!stepExpr, 'and rounds the fade into steps, so the glow is a few strokes and not one per cell');
+  const steps = stepExpr ? +stepExpr[1] : 8;
+  const alpha = expr => {
+    const f = new Function('tick', 'w', 't', 'WALL_TICKS', expr + ' return a;');
+    return (age, wallTicks) => Math.round(Math.max(0, f(age, {born: 0}, 0, wallTicks)) * steps) / steps;
+  };
+  const now = fadeExpr ? alpha(fadeExpr[0]) : () => 0;
+  const was = alpha('const age = tick - w.born + t, a = age > WALL_TICKS - 20 ? Math.max(0, (WALL_TICKS - age) / 20) : 1;');
+
+  // one cell, laid by a rider who then rides a lap so it is never its own wall that ends the run - a
+  // barricade vanishes with its owner, so a rider who died early would cut the window short and the
+  // whole sweep would pass on a wall that never got old
+  const a = arena();
+  const {b, say} = rider(a, 'LOK', 2, 2, 'R');
+  say({t: 'blade', on: true});
+  const cell = b.y * 40 + b.x;
+  a.step();
+  say({t: 'blade', on: false});
+  const born = a.born[cell], lethal = [];
+  for (let i = 0; i < 100; i++) {
+    if (b.dir === 'R' && b.x >= 37) say({t: 'turn', d: 'D'});
+    else if (b.dir === 'D' && b.y >= 57) say({t: 'turn', d: 'L'});
+    else if (b.dir === 'L' && b.x <= 4) say({t: 'turn', d: 'U'});
+    a.step();
+    if (a.owner[cell]) lethal.push(a.tick - born);
+  }
+  assert(b.alive, 'the rider lasts long enough for its one barricade to expire under it');
+  const wallTicks = lethal.length ? lethal[lethal.length - 1] + 1 : 0;
+  is(lethal[0], 1, 'the barricade kills from the tick after it is laid');
+  is(wallTicks, 80, 'and the referee lets go of it at 80 ticks of age');
+  const dimmest = Math.min(...lethal.map(age => now(age, wallTicks)));
+  is(lethal.filter(age => now(age, wallTicks) <= 0).length, 0,
+    'not one tick of a wall that still kills is drawn at nothing');
+  assert(dimmest >= 0.25, 'and the dimmest a lethal wall ever gets is ' + Math.round(dimmest * 100)
+    + '% of full, not a shade of the floor');
+  // the floor only stays honest because the page throws the cell away on the same tick the referee
+  // does - otherwise it would hold a dim ribbon on screen over floor that is safe to ride
+  const prune = page.match(/if \(w\.born \+ WALL_TICKS <= tick\) walls\.delete\(c\);/g) || [];
+  is(prune.length, 2, 'the page drops a barricade on the same tick the referee does, in both its loops');
+  // and the check earns its keep: the fade it replaced has to be caught by this same sweep
+  assert(lethal.some(age => was(age, wallTicks) <= 0),
+    'the fade this replaced drew a still-lethal wall at zero, and this sweep catches it');
+  assert(lethal.filter(age => was(age, wallTicks) < 0.25).length >= 3,
+    'along with the ticks either side of it that were only a shade brighter than the floor');
+}
+
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
