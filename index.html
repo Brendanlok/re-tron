@@ -371,7 +371,13 @@ function onMsg(m) {
     for (const [id, n, bot] of m.names) names.set(id, {n, bot});
     for (const b of m.bikes) setBike(b);
   } else if (m.t === 'you') {
-    me = m.id; riding = true; myStart = tick; pend = []; myKos = 0; bladeOn = false;
+    // the arena says which tick it cut the seat on, and the clock starts there rather than on the last
+    // tick this page happens to have applied. Those are the same number only when no tick was in flight
+    // when the join landed, which on a phone is the exception: the HUD read 0.1s while the referee said
+    // 0.0 and stayed a tick ahead all run, so the time counting up in front of the rider was not the
+    // time the result screen would hand back. Fall back to the local tick for a cached page meeting a
+    // referee that does not send it.
+    me = m.id; riding = true; myStart = m.k === undefined ? tick : (tick = m.k); pend = []; myKos = 0; bladeOn = false;
     tickAt = performance.now();   // the quiet-arena watch starts now, not at the menu's last pretend tick
     if (m.b) setBike(m.b);   // the arena says where it dropped you, so the first frame is already your bike
     // and the standings go up with it. The tick only carries them once a second, so the corner panel was

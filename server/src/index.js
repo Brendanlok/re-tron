@@ -150,7 +150,15 @@ export class Arena {
     // tick left the corner panel showing the LAST run's rows for up to 900ms - and the arena resets its
     // ids to 1 whenever the last socket goes, so one of those dead rows could carry the new rider's own
     // id and light up as him, which is the name-matching bug of 18 Oct coming back through staleness.
-    this.send(s, {t: 'you', id: b.id, b: this.pack(b), top: this.topRows()});
+    // and WHICH TICK it is, because the page starts its own "alive" clock from the last tick it has
+    // been given, and that is not the tick this seat was cut on. A join is handled the moment it
+    // arrives rather than on a tick boundary, so any tick that is still in flight when it lands is one
+    // the page has not applied: measured on this referee, a seat cut on tick 21 against a page still
+    // holding 20 had the HUD reading 0.1s while the referee said 0.0, and the gap rode out the whole
+    // run. The remaining time in the current tick is what the join has to beat, and it is anywhere in
+    // 0-100ms, so on a phone with 60ms of round trip most joins lose that race and a slow one loses it
+    // by two ticks. The referee knows the number; send it rather than let the page guess.
+    this.send(s, {t: 'you', id: b.id, k: this.tick, b: this.pack(b), top: this.topRows()});
   }
 
   drop(s) {

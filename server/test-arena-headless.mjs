@@ -1483,5 +1483,62 @@ function ride(a, name, y0, kos = 0) {
     'and a "you" with no standings on it - the message this replaced - really did show the panel unpainted');
 }
 
+// ---- the clock in front of the rider is the referee's clock ----
+// The HUD's "alive" tile is the fourth copy of the score, and the only one the rider watches count up.
+// It is drawn from myStart, which the page set to the last tick it had APPLIED - and a join is handled
+// the moment it arrives rather than on a tick boundary, so any tick still in flight is one the page has
+// not applied yet. Measured on this referee: a seat cut on tick 21 against a page holding 20 had the HUD
+// reading 0.1s while the referee said 0.0, and it stayed a tick ahead for the whole run. The rider rode
+// a run shown as 15.3 and was handed 15.1 by the result screen, which takes the referee's own number -
+// the same two-halves-of-one-fact shape as the walls drawn at nothing and the standings from the last
+// run. The remaining time in the current tick is what a join has to beat and it is anywhere in 0-100ms,
+// so a phone with 60ms of round trip loses that race on most joins and a slow one loses it by two ticks.
+// Fixed by sending the tick with the seat, on the same bespoke message that already carries the
+// position and the standings.
+{
+  const a = arena();
+  rider(a, 'AAA', 10, 10, 'R');
+  for (let i = 0; i < 20; i++) a.step();
+  const got = [];
+  const s = {ws: {send: t => got.push(JSON.parse(t))}, bike: null, count: 0, windowAt: Date.now(), idle: 0};
+  a.socks.add(s);
+  a.onMsg(s, JSON.stringify({t: 'join', name: 'LOK'}));       // arrives between ticks, like every real join
+  for (let i = 0; i < 200 && s.waiting !== undefined; i++) a.trySpawn(s);
+  const you = got.find(m => m.t === 'you');
+  assert(you && you.k !== undefined, 'the seat says which tick it was cut on');
+  is(you && you.k, s.bike.start, 'and it is the tick the referee started the run on');
+  assert(!got.some(m => m.t === 'k' && m.k === you.k),
+    'which the page could not have known: no broadcast for that tick has been sent to it yet');
+  // and the gap really does ride out the run rather than closing itself
+  const behind = you.k - 1;                                    // what the page would have had
+  for (let i = 0; i < 30; i++) a.step();
+  is((a.tick - behind) - (a.tick - s.bike.start), 1,
+    'three seconds later the old clock is still exactly one tick ahead of the referee');
+
+  // the PAGE's half, driven out of index.html
+  const pg = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const open = pg.indexOf('function onMsg(m) {');
+  const end = pg.indexOf('// Each step starts from where the bike is drawn', open);
+  const src = open > 0 && end > open ? pg.slice(open, end) : '';
+  assert(src.includes("m.t === 'you'"), 'the page takes its seat in onMsg');
+  const seat = msg => {
+    const ctx = {
+      W: 40, H: 60, me: 0, tick: behind, myStart: 0, pend: [], myKos: 0, bladeOn: false, riding: false,
+      WALL_TICKS: 80, TICK_MS: 100, isTouch: false, walls: new Map(), bikes: new Map(), names: new Map(),
+      performance: {now: () => 1}, setBike: () => {}, paint: () => {}, hangUp: () => {}, paintBoard: () => {},
+      $: () => ({set hidden(v) {}, textContent: '', classList: {toggle() {}}}),
+    };
+    new Function('ctx', 'with (ctx) {' + src + ';return onMsg; }')(ctx)(msg);
+    return ctx;
+  };
+  const ctx = seat({t: 'you', id: you.id, k: you.k, b: [you.id, 10, 10, 0, 0, 100], top: you.top});
+  is(ctx.myStart, s.bike.start, 'a page a tick behind starts its clock on the tick the referee gave it');
+  is(((you.k - ctx.myStart) / 10).toFixed(1), '0.0', 'so the HUD reads 0.0 on the first frame of the run');
+  // red against the old rule: the message without the tick on it is what the page used to get
+  const was = seat({t: 'you', id: you.id, b: [you.id, 10, 10, 0, 0, 100], top: you.top});
+  is(was.myStart, behind, 'and the message this replaced really did start it a tick early');
+  is(((you.k - was.myStart) / 10).toFixed(1), '0.1', 'which is the 0.1s the HUD used to be ahead by');
+}
+
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
