@@ -513,8 +513,11 @@ function showResult(s, reason, killer) {
   $('hud').hidden = $('board').hidden = $('blade').hidden = $('pad').hidden = $('hint').hidden = true;
 }
 function paintBoard(top) {
-  $('board').innerHTML = '<div class="ct">Top riders</div>' + top.map(([n, sc, bot]) =>
-    '<div class="row' + (bot ? ' bot' : '') + (!bot && names.get(me) && n === names.get(me).n ? ' you' : '') + '"><span class="nm">' +
+  // Your own row is found by id, not by name: two strangers both typing LOK is not a thing the arena
+  // prevents, and by name BOTH rows came back as yours with the other rider's score on top of your own.
+  // The name is still the fallback for the minute after a deploy when a cached page meets rows with no id.
+  $('board').innerHTML = '<div class="ct">Top riders</div>' + top.map(([n, sc, bot, id]) =>
+    '<div class="row' + (bot ? ' bot' : '') + (!bot && (id === undefined ? names.get(me) && n === names.get(me).n : id === me) ? ' you' : '') + '"><span class="nm">' +
     n.replace(/[<&]/g, '') + '</span><b>' + sc + '</b></div>').join('');
 }
 // Under this, the blade is not worth taking: a tap at 5% laid two cells and then started the full

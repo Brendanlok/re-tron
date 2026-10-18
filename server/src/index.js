@@ -346,7 +346,11 @@ export class Arena {
     const msg = {t: 'k', k: this.tick, b: [...this.bikes.values()].map(b => this.pack(b))};
     for (const f of ['a', 'c', 'e', 'n']) if (this.out[f].length) msg[f] = this.out[f];
     if (this.tick % 10 === 0) {
-      msg.top = [...this.bikes.values()].map(b => [b.name, Math.floor((this.tick - b.start) / 10) + 10 * b.kos, b.bot ? 1 : 0])
+      // the id goes with the name, because nothing stops two riders typing the same one: the page used
+      // to find itself in this list by NAME, so both LOKs lit up as you and the stranger's score sat on
+      // top of your own. Appended last, so a page served from cache mid-deploy reads the first three
+      // fields exactly as before.
+      msg.top = [...this.bikes.values()].map(b => [b.name, Math.floor((this.tick - b.start) / 10) + 10 * b.kos, b.bot ? 1 : 0, b.id])
         .sort((a, b) => b[1] - a[1]).slice(0, 5);
       msg.on = [...this.bikes.values()].filter(b => !b.bot).length;
     }

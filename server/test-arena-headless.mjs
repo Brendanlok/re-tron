@@ -983,17 +983,57 @@ function ride(a, name, y0, kos = 0) {
   const open = page.lastIndexOf('+ (', mark);   // the condition's own bracket, which holds brackets itself
   const cond = mark > 0 ? page.slice(open + 3, mark).trim() : '';
   assert(!!cond && cond.includes('names.get(me)'), 'the page picks the rider their own row out of the live list');
+  // Rows here carry no id on purpose: these are the three-field rows a page served from cache meets in
+  // the minute after a deploy, so this block drives the name fallback. The id path the live referee
+  // actually sends is driven on real broadcast output in the block directly below.
   const isYou = cond
-    ? new Function('n', 'bot', 'me', 'names', 'return !!(' + cond + ')')
+    ? new Function('n', 'bot', 'id', 'me', 'names', 'return !!(' + cond + ')')
     : () => false;
   // the player is bike 7 riding as FLUX; bot 3 had the name first and keeps it
   const names = new Map([[7, {n: 'FLUX', bot: false}], [3, {n: 'FLUX', bot: true}]]);
   const top = [['FLUX', 44, 1], ['FLUX', 31, 0], ['VOLT', 12, 1]];
-  const you = top.filter(([n, sc, bot]) => isYou(n, !!bot, 7, names));
+  const you = top.filter(([n, sc, bot]) => isYou(n, !!bot, undefined, 7, names));
   is(you.length, 1, 'exactly one row is highlighted when a bot shares the rider name');
   is(you.length === 1 && you[0][2], 0, 'and it is the rider, not the bot that was named first');
-  is(top.filter(([n, sc, bot]) => isYou(n, !!bot, 7, new Map([[7, {n: 'VOLT', bot: false}]]))).length, 0,
+  is(top.filter(([n, sc, bot]) => isYou(n, !!bot, undefined, 7, new Map([[7, {n: 'VOLT', bot: false}]]))).length, 0,
     'and a rider whose name no live bike shares is not highlighted on a bot row');
+}
+// Two STRANGERS who both typed LOK is the case the bot dedupe cannot reach: the arena does not make a
+// typed name unique, and by name the page found BOTH of them and lit both rows as 'you' - with whichever
+// LOK was doing better sitting on top of your own score. Measured on the real referee 2026-10-18: the
+// second LOK was shown two rows as his, reading 5 and 2, while his own run was worth 2. The row carries
+// the bike id now, so the page matches on the one thing that is actually unique.
+{
+  const a = arena();
+  const first = rider(a, 'LOK', 2, 2, 'D').b;          // one person
+  for (let i = 0; i < 30; i++) a.step();                // give him a head start, so the scores differ
+  const second = rider(a, 'LOK', 20, 2, 'D').b;        // a different person, same typed name
+  rider(a, 'ZARA', 36, 2, 'D');
+  for (let i = 0; i < 20; i++) a.step();
+  assert(first.alive && second.alive && first.id !== second.id, 'two different riders are both in the arena as LOK');
+  const top = a.feed.filter(m => m.top).pop().top;
+  is(top.filter(([n]) => n === 'LOK').length, 2, 'the rider list carries both of them under the same name');
+  is(top[0].length, 4, 'and every row now carries the bike id as its fourth field');
+  assert(top.some(r => r[3] === second.id), "including the second LOK's own id");
+
+  // the page's real condition, lifted out of index.html rather than restated
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const pb = page.indexOf('function paintBoard');
+  const mark = page.indexOf("? ' you' : ''", pb);
+  const open = page.lastIndexOf('+ (', mark);
+  const cond = page.slice(open + 3, mark).trim();
+  const isYou = new Function('n', 'bot', 'id', 'me', 'names',
+    'return !!(' + cond + ')');
+  const names = new Map([...a.bikes.values()].map(b => [b.id, {n: b.name, bot: b.bot}]));
+  const yours = top.filter(([n, , bot, id]) => isYou(n, !!bot, id, second.id, names));
+  is(yours.length, 1, 'exactly one row is highlighted as the second LOK\'s own');
+  assert(yours.length === 1 && yours[0][3] === second.id, 'and it is his bike, not the other LOK who is doing better');
+  // the fix is the id: prove the old name-only rule really does fail this, so this check cannot pass by luck
+  const byName = top.filter(([n, , bot]) => !bot && names.get(second.id) && n === names.get(second.id).n);
+  is(byName.length, 2, 'matching by name alone would have highlighted both, which is the fault being fixed');
+  // a cached page that meets a row with no id must still find itself, rather than nothing being highlighted
+  is(top.filter(([n, , bot]) => isYou(n, !!bot, undefined, second.id, names)).length, 2,
+    'a row with no id falls back to the name, so a mid-deploy page highlights too much rather than nothing');
 }
 // While you are on a bike the referee sends a tick every 100ms (see the broadcast at the end of step).
 // So silence is a fault, and both faults that produce it leave the socket looking open from the page's
