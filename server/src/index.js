@@ -206,7 +206,7 @@ export class Arena {
       // always free; the old rule stays as the fallback rather than risk a nameless bike.
       if (bot) { const taken = new Set([...this.bikes.values()].map(o => o.name));
         b.name = BOT_NAMES.find(n => !taken.has(n)) || BOT_NAMES[b.id % BOT_NAMES.length]; }
-      else if (!b.name) b.name = 'RIDER' + b.id;   // before the announcement below, or everyone is told a blank
+      else if (!b.name) b.name = this.riderName(b.id);   // before the announcement below, or everyone is told a blank
       this.bikes.set(b.id, b);
       this.out.n.push([b.id, b.name, bot ? 1 : 0]);
       return b;
@@ -236,6 +236,28 @@ export class Arena {
     if (!b.bot && b.name && score > 0)
       this.sql.exec('INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)',
         today(), b.name, score, Math.round(secs * 10) / 10, b.kos, Date.now());
+  }
+
+  // The name the arena gives a rider who typed none, which on launch day is most of them: the box is
+  // blank for a first-time visitor and Start works without it. It used to be 'RIDER' + the bike id, and
+  // reset() puts nextId back to 1 every time the last socket goes - after nearly every run, as things
+  // stand - so one anonymous rider after another was RIDER1. The board groups BY NAME and keeps the best
+  // score, so two strangers came back as a single row: the one who scored less is not on the board at
+  // all, under a result screen that has just told them to look for their name on it. Take a number no
+  // rider in the arena and no run on the board is using, the way bot names are taken - the board is what
+  // merges by name, so the board is what has to be read. Three digits keeps it inside the same eight
+  // characters a typed name is cut to.
+  riderName(id) {
+    const taken = new Set([...this.bikes.values()].map(o => o.name));
+    for (const r of this.sql.exec('SELECT DISTINCT name FROM runs')) taken.add(r.name);
+    // walk from a random start rather than retrying at random: a free number is then always found
+    // rather than usually found, and the names still do not read as a counter
+    const from = Math.floor(Math.random() * 900);
+    for (let i = 0; i < 900; i++) {
+      const n = 'RIDER' + (100 + (from + i) % 900);
+      if (!taken.has(n)) return n;
+    }
+    return 'RIDER' + id;   // 900 names at once does not happen, but a nameless bike is never written down
   }
 
   // Best run per name, so one rider cannot fill the board. day = null means all time.

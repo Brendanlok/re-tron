@@ -630,7 +630,10 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   a.onMsg(s, JSON.stringify({t: 'join', name: ''}));
   a.step();
   const id = s.bike && s.bike.id, told = a.feed.flatMap(m => m.n || []).find(([i]) => i === id);
-  is(told && told[1], 'RIDER' + id, 'everyone is told the nameless rider is RIDER' + id + ', not a blank');
+  // the name itself is picked to be free rather than to be the bike id (see the board section below),
+  // so what matters here is that the arena announces the SAME one the board will file the run under
+  assert(told && /^RIDER[0-9]{3}$/.test(told[1]), 'everyone is told a name, not a blank (' + (told && told[1]) + ')');
+  is(told && told[1], s.bike && s.bike.name, 'and it is the name the board will file the run under');
 }
 
 // ---- a name the board cannot keep is said out loud, not rubbed out in silence ----
@@ -724,6 +727,43 @@ function ride(a, name, y0, kos = 0) {
   is(row[1], 31, 'and it is their best run, not their last');
   is(row[2], 1.5, 'with that same run seconds beside it');
   is(row[3], 3, 'and that same run knockouts');
+}
+
+// A blank name box is the launch-day default: it is empty for a first-time visitor, Start works
+// without it, and the arena names those riders itself. That name used to be the bike id, and reset()
+// puts nextId back to 1 every time the last socket goes - which right now is after nearly every run -
+// so one anonymous rider after another was RIDER1. The board groups BY NAME and keeps the best score,
+// so two strangers came back as ONE row: the one who scored less is not on the board at all, under a
+// result screen that has just told them to look for their name on it.
+{
+  const a = arena({board: true});
+  const one = ride(a, '', 2, 2);        // 5.8s + 2 KOs -> 25
+  a.reset();                            // exactly what stop() does when the last socket goes
+  const two = ride(a, '', 30);          // 3.0s, no knockouts -> 3
+  assert(one.name !== two.name, 'two anonymous riders either side of a reset get different names');
+  is(a.top(null).length, 2, 'so each of them keeps their own row on the board');
+  assert(one.name.length <= 8, 'an assigned name fits the same 8 characters a typed one is cut to');
+}
+
+// And the name has to dodge the BOARD, not just the arena - the rider it would be merged with rode
+// yesterday and is long gone. Deterministic on purpose: every name but one is already on the board, so
+// a search that does not really read the board cannot pass this by luck.
+{
+  const a = arena({board: true});
+  for (let i = 0; i < 900; i++)
+    if (i !== 377) a.sql.exec('INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)', TODAY, 'RIDER' + (100 + i), 1, 0.1, 0, i);
+  const b = a.spawn('', false);
+  is(b.name, 'RIDER477', 'the one name left on the board is the one the arena hands out');
+}
+
+// 900 riders on the board at once is not a thing that happens, but a bike must never be left nameless:
+// a blank name is never written down, so that run would vanish instead of landing on the board.
+{
+  const a = arena({board: true});
+  for (let i = 0; i < 900; i++)
+    a.sql.exec('INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)', TODAY, 'RIDER' + (100 + i), 1, 0.1, 0, i);
+  const b = a.spawn('', false);
+  assert(b.name && b.name.length > 0, 'with every name taken the rider still gets one');
 }
 
 // Today and All time are two different boards. Yesterday's runs showing under Today would make the
