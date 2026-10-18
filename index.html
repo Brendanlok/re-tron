@@ -332,16 +332,19 @@ function liveCount() {
 const menuUp = () => !$('overlay').hidden && document.visibilityState === 'visible';
 // a board that failed to load is retried on the same beat — /top never starts the tick, so this is
 // as cheap as the count, and it is asked only while the menu is actually on screen
-const menuPoll = () => { liveCount(); if (!lbData) loadTop(); };
+const menuPoll = () => { liveCount(); if (!lbData || lbStale) loadTop(); };
 setInterval(() => { if (menuUp()) menuPoll(); }, 20000);
 document.addEventListener('visibilitychange', () => { if (menuUp()) menuPoll(); });
 
 // ---- the board ---------------------------------------------------------------------------
 // The server is the only thing that writes a score, on the tick it knocks you out, so there is
 // nothing here to forge. Best run per rider, today and all time.
-let lbView = 'today', lbData = null;
+// lbStale: the rows on screen are known to be behind the arena - a run has ended since they were
+// fetched and the re-ask did not get through. The board is only re-asked while that is true, so an
+// idle menu still costs one request a beat rather than two.
+let lbView = 'today', lbData = null, lbStale = false;
 function loadTop() {
-  fetch(http('/top')).then(r => r.ok ? r.json() : Promise.reject()).then(d => { lbData = d; paintLb(); })
+  fetch(http('/top')).then(r => r.ok ? r.json() : Promise.reject()).then(d => { lbData = d; lbStale = false; paintLb(); })
     // This used to swallow the failure, so a cold server or a phone on bad signal left the menu with a
     // hole where the board goes and nothing to say why. Say it, and let a tap try again.
     .catch(() => {
@@ -527,6 +530,15 @@ function showResult(s, reason, killer) {
   $('startLbl').textContent = 'Start again';
   if (reason !== 'lost') hangUp();
   armAt = performance.now() + 500;   // you died with your thumb on the blade; don't restart out from under the score
+  // Your run is on the board by now - measured on the referee, an abandoned bike is knocked out and
+  // written down 0.1-2.7s after a rider goes quiet, and this screen does not appear until 5s of
+  // silence. But on the 'lost' path the thing that lost the connection is the network, so this is the
+  // one re-ask most likely to fail - and it used to fail for good: the menu's own beat re-asked the
+  // board only when there was none, so a player told "look for your name on the board" was shown the
+  // board from before their run and nothing ever replaced it, while the rider count beside it kept
+  // updating from the same beat and proved the page had its signal back. Mark it behind and let the
+  // beat keep trying until it lands.
+  lbStale = true;
   menuReady(); liveCount(); loadTop();
   $('overlay').hidden = false;
   $('hud').hidden = $('board').hidden = $('blade').hidden = $('pad').hidden = $('hint').hidden = true;
