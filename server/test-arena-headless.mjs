@@ -1307,9 +1307,14 @@ function ride(a, name, y0, kos = 0) {
   const WORD = {1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six',
     7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten', 11: 'eleven', 12: 'twelve'};
   const flat = f => readFileSync(new URL('../press/' + f, import.meta.url), 'utf8').replace(/\s+/g, ' ');
-  const copy = {'launch-copy.md': flat('launch-copy.md'), 'itch-description.txt': flat('itch-description.txt')};
+  const copy = {'launch-copy.md': flat('launch-copy.md'), 'itch-description.txt': flat('itch-description.txt'),
+    // README.md states the same balance in digits rather than words, and it is the first thing anyone
+    // reading the repo is told. It also carries the one number neither press file mentions - the 1s the
+    // charge waits at zero after running dry - so without this it was the only public statement of that
+    // rule with nothing holding it to the referee.
+    'README.md': readFileSync(new URL('../README.md', import.meta.url), 'utf8').replace(/\s+/g, ' ')};
   const blade = secs('BLADE_TICKS'), recharge = secs('RECHARGE_TICKS'), wall = secs('WALL_TICKS');
-  const target = num('TARGET'), perKo = ko ? Number(ko[1]) : 0;
+  const target = num('TARGET'), perKo = ko ? Number(ko[1]) : 0, dry = secs('EMPTY_GAP');
   const claims = [
     ['the blade lasts ' + blade + 's', 'launch-copy.md', 'about $ seconds of blade', blade],
     ['the blade lasts ' + blade + 's', 'itch-description.txt', 'about $ seconds of blade', blade],
@@ -1321,9 +1326,14 @@ function ride(a, name, y0, kos = 0) {
     ['bots top the arena up to ' + target + ' bikes', 'itch-description.txt', 'arena at $ bikes', target],
     ['a knockout is worth ' + perKo, 'launch-copy.md', '$ a knockout', perKo],
     ['a knockout is worth ' + perKo, 'itch-description.txt', '$ a knockout', perKo],
+    ['the blade lasts ' + blade + 's', 'README.md', 'about $s of wall', blade, 1],
+    ['recharging takes ' + recharge + 's', 'README.md', '$s to recharge', recharge, 1],
+    ['the charge waits ' + dry + 's at zero', 'README.md', 'a $s wait if you run it dry', dry, 1],
+    ['a wall stands for ' + wall + 's', 'README.md', 'fade after $s', wall, 1],
+    ['bots top the arena up to ' + target + ' bikes', 'README.md', 'up to $ bikes', target, 1],
   ];
-  for (const [rule, file, phrase, value] of claims) {
-    const want = phrase.replace('$', WORD[value] || '(' + value + ' - no word for it)');
+  for (const [rule, file, phrase, value, digits] of claims) {
+    const want = phrase.replace('$', digits ? value : WORD[value] || '(' + value + ' - no word for it)');
     assert(new RegExp(want, 'i').test(copy[file]), file + ' says ' + rule + ' ("' + want + '")');
   }
 }
