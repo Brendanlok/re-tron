@@ -756,14 +756,30 @@ function ride(a, name, y0, kos = 0) {
   is(b.name, 'RIDER477', 'the one name left on the board is the one the arena hands out');
 }
 
-// 900 riders on the board at once is not a thing that happens, but a bike must never be left nameless:
-// a blank name is never written down, so that run would vanish instead of landing on the board.
+// Past 900 the pool is spent, and 'the bike still gets a name' was never enough to ask. The old
+// fallback was 'RIDER' + the bike id, and reset() puts ids back to 1 whenever the last socket goes -
+// so two strangers either side of a reset were both RIDER1, and the board, which keeps the best run
+// per NAME, showed the pair of them as one row with the loser missing. That is the same failure as
+// the block above reached by a different road, and the road is the point: 900 anonymous riders have
+// to have SCORED, not to be riding at once, and nothing ever prunes the board. Measured on this
+// referee before the fix - two RIDER1s and one row. So the fallback has to be UNIQUE, not non-empty.
 {
   const a = arena({board: true});
   for (let i = 0; i < 900; i++)
     a.sql.exec('INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)', TODAY, 'RIDER' + (100 + i), 1, 0.1, 0, i);
-  const b = a.spawn('', false);
-  assert(b.name && b.name.length > 0, 'with every name taken the rider still gets one');
+  const one = ride(a, '', 2, 2);        // 25 points
+  a.reset();                            // exactly what stop() does when the last socket goes
+  const two = ride(a, '', 30);          // 3 points
+  assert(one.name && two.name, 'with every three-digit name taken the riders still get one');
+  assert(one.name !== two.name,
+    'and two strangers either side of a reset still get different ones (' + one.name + ', ' + two.name + ')');
+  assert(one.name.length <= 8 && two.name.length <= 8,
+    'still inside the 8 characters a typed name is cut to (' + one.name + ', ' + two.name + ')');
+  assert(!/^RIDER[0-9]{3}$/.test(one.name),
+    'and it is not one of the three-digit names the board already holds (' + one.name + ')');
+  is(a.top(TODAY).filter(r => r[0] === one.name || r[0] === two.name).length, 2,
+    'so the board carries both of their runs rather than merging them into one');
+  is(a.top(TODAY)[0] && a.top(TODAY)[0][1], 25, 'with the better run on top, as any other pair would be');
 }
 
 // Today and All time are two different boards. Yesterday's runs showing under Today would make the

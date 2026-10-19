@@ -252,12 +252,27 @@ export class Arena {
     for (const r of this.sql.exec('SELECT DISTINCT name FROM runs')) taken.add(r.name);
     // walk from a random start rather than retrying at random: a free number is then always found
     // rather than usually found, and the names still do not read as a counter
-    const from = Math.floor(Math.random() * 900);
-    for (let i = 0; i < 900; i++) {
-      const n = 'RIDER' + (100 + (from + i) % 900);
-      if (!taken.has(n)) return n;
-    }
-    return 'RIDER' + id;   // 900 names at once does not happen, but a nameless bike is never written down
+    const walk = (span, label) => {
+      const from = Math.floor(Math.random() * span);
+      for (let i = 0; i < span; i++) {
+        const n = 'RIDER' + label((from + i) % span);
+        if (!taken.has(n)) return n;
+      }
+      return null;
+    };
+    // The 900 three-digit names are the ones a player should see, so they are taken first. But the set
+    // read above is every name the BOARD has ever held, not the handful in the arena right now, and the
+    // board is never pruned - so the pool is spent once 900 anonymous riders have SCORED, not once 900
+    // are riding at the same time. Past that the old code fell back to 'RIDER' + the bike id, and
+    // reset() puts ids back to 1 whenever the last socket goes: measured on this referee with 900 names
+    // on the board, two strangers in two arena lifetimes were both called RIDER1, and the board keeps
+    // the best run per NAME, so it showed the pair of them as one row with the loser missing - the
+    // 18 Oct merge bug coming back on the day the game gets busy enough to matter. Three base-36
+    // characters is the same eight letters wide and holds 46,656 names, so the fallback is unique
+    // rather than merely different, and the pool cannot run out in the life of the game.
+    return walk(900, n => 100 + n)
+      || walk(46656, n => n.toString(36).toUpperCase().padStart(3, '0'))
+      || 'RIDER' + id;   // 46,656 at once does not happen, but a nameless bike is never written down
   }
 
   // Best run per name, so one rider cannot fill the board. day = null means all time.
