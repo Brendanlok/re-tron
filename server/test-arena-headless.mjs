@@ -1580,5 +1580,68 @@ function ride(a, name, y0, kos = 0) {
   is(((you.k - was.myStart) / 10).toFixed(1), '0.1', 'which is the 0.1s the HUD used to be ahead by');
 }
 
+// ---- a board the page knows is behind must be re-asked until it is current, and then go quiet ----
+// The result screen tells a rider "That run still counted - look for your name on the board", and on the
+// dropped-connection path the thing that has just failed is the network, so that screen's own re-ask is
+// the one most likely to fail. What catches it afterwards is the menu's 20s beat, and that beat used to
+// re-ask the board ONLY when there was none at all - so a player whose signal came back was shown the
+// board from BEFORE their run for the rest of the visit, with the rider count beside it updating off the
+// same beat and proving the page had its signal back. Fixed 19 Oct by marking the rows on screen as
+// behind and letting the beat keep trying. Pinned here because it is one flag read in three places - set
+// on the result screen, read by the beat, cleared by a landing board - and an edit to any one of them
+// silently restores the old behaviour. BOTH halves are checked, because they fail in opposite
+// directions: too few asks is the bug above, and never clearing the flag means an idle menu asks the
+// arena twice a beat for ever, which is a bill on the one Cloudflare allowance that can actually run out.
+{
+  const pg = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const beat = pg.split('\n').find(l => l.startsWith('const menuPoll ='));
+  const open = pg.indexOf('function loadTop() {');
+  const end = pg.indexOf('// the same tap retries it', open);
+  const src = open > 0 && end > open ? pg.slice(open, end) : '';
+  assert(src.includes('lbStale = false'), 'a board that lands clears the mark saying the rows are behind');
+  const res = pg.slice(pg.indexOf('function showResult('), pg.indexOf('function paintBoard('));
+  assert(res.includes('lbStale = true'), 'and a finished run sets it, so the beat knows to try');
+
+  const settle = () => new Promise(r => setTimeout(r, 0));
+  // the menu's beat and its board loader, driven out of index.html with the fetch under this test's thumb
+  const menu = (rows, gate) => {
+    const ctx = {lbView: 'today', lbData: rows, lbStale: false, asks: 0, answer: null,
+      paintLb: () => {}, liveCount: () => {}, http: p => p, $: () => ({}),
+      fetch: () => { ctx.asks++; return ctx.answer(); }};
+    ctx.beat = new Function('ctx', 'with (ctx) {' + src + (gate || beat) + '; return menuPoll; }')(ctx);
+    return ctx;
+  };
+  const lost = () => Promise.reject(new Error('no signal'));
+  const lands = d => () => Promise.resolve({ok: true, json: () => Promise.resolve(d)});
+  const was = [['SDF', 29, 19.6, 1]], now = [['LOK', 41, 31.2, 1], ['SDF', 29, 19.6, 1]];
+
+  const m = menu(was);
+  m.answer = lost;
+  m.beat(); await settle();
+  is(m.asks, 0, 'a menu whose board is current does not ask for it again');
+  m.lbStale = true;                                   // a run has just ended under a failed re-ask
+  m.beat(); await settle();
+  is(m.asks, 1, 'once the rows are known to be behind the beat asks for them');
+  is(m.lbData, was, 'a re-ask that fails keeps the board on screen rather than blanking it');
+  assert(m.lbStale, 'and leaves it marked behind: it is still the board from before the run');
+  m.beat(); await settle();
+  is(m.asks, 2, 'so the next beat asks again - this is the ask the old gate never made');
+  m.answer = lands({day: '2026-10-19', today: now, all: now});
+  m.beat(); await settle();
+  is(m.asks, 3, 'the beat that finally gets through');
+  is(m.lbData.today, now, 'and the rider is shown the board with their own run on it');
+  assert(!m.lbStale, 'the rows are current, so the mark comes off');
+  m.beat(); m.beat(); await settle();
+  is(m.asks, 3, 'and an idle menu goes back to costing nothing: two more beats, no further asks');
+
+  // red against the old rule: the gate this replaced asked only when there was no board at all
+  const old = menu(was, 'const menuPoll = () => { liveCount(); if (!lbData) loadTop(); };');
+  old.answer = lands({today: now, all: now});
+  old.lbStale = true;
+  old.beat(); old.beat(); old.beat(); await settle();
+  is(old.asks, 0, 'the gate this replaced really did leave the player on the board from before their run');
+  is(old.lbData, was, 'and nothing ever replaced it for the rest of the visit');
+}
+
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
