@@ -54,7 +54,15 @@ setTimeout(function () {
   bike(1002, 'VEX', 15, 25, 'U', false, 52);
 
   me = 1; riding = true; myStart = tick - 2039; myKos = 6;
-  paintBoard([['ZED', 204, 1], ['YOU', 158, 0], ['ORA', 131, 1], ['MOX', 96, 1], ['KIT', 74, 1]]);
+  // Your row is WORKED OUT the way the referee works it out, not typed in beside the others. It used
+  // to be typed, and the picture then disagreed with itself: the HUD above it read 203.9 alive and 6
+  // knockouts, which is 263 by the game's own rule, while the row underneath said 158 and sat you
+  // second on a board you were top of. The HUD half is computed from myStart and myKos, so a hand-
+  // written score here is a second source for one number and goes stale the moment the scene is
+  // retimed - which is exactly what happened. One source, and the rows sort themselves after it.
+  const mine = Math.floor((tick - myStart) / 10) + 10 * myKos;
+  paintBoard([['ZED', 204, 1], ['YOU', mine, 0], ['ORA', 131, 1], ['MOX', 96, 1], ['KIT', 74, 1]]
+    .sort((a, b) => b[1] - a[1]));
   $('overlay').hidden = true;
   $('hud').hidden = $('board').hidden = $('hint').hidden = false;
   $('hint').textContent = 'space deploys the blade';
