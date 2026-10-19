@@ -1594,7 +1594,11 @@ function ride(a, name, y0, kos = 0) {
 // arena twice a beat for ever, which is a bill on the one Cloudflare allowance that can actually run out.
 {
   const pg = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const beat = pg.split('\n').find(l => l.startsWith('const menuPoll ='));
+  // The WHOLE beat, not its first line. It grew a second arm on 19 Oct (the day-rollover check at the
+  // foot of this block) and a one-line lift then handed this harness half a function - which does not
+  // quietly test less, it throws, so the suite says so rather than going green over nothing.
+  const bOpen = pg.indexOf('const menuPoll = ');
+  const beat = pg.slice(bOpen, pg.indexOf('\n};', bOpen) + 3);
   const open = pg.indexOf('function loadTop() {');
   const end = pg.indexOf('// the same tap retries it', open);
   const src = open > 0 && end > open ? pg.slice(open, end) : '';
@@ -1605,7 +1609,8 @@ function ride(a, name, y0, kos = 0) {
   const settle = () => new Promise(r => setTimeout(r, 0));
   // the menu's beat and its board loader, driven out of index.html with the fetch under this test's thumb
   const menu = (rows, gate) => {
-    const ctx = {lbView: 'today', lbData: rows, lbStale: false, asks: 0, answer: null,
+    const ctx = {lbView: 'today', lbData: rows, lbStale: false, lbDay: '', asks: 0, answer: null,
+      day: '2026-10-19', utcDay: () => ctx.day,   // the clock is the test's, so a turnover can be staged
       paintLb: () => {}, liveCount: () => {}, http: p => p, $: () => ({}),
       fetch: () => { ctx.asks++; return ctx.answer(); }};
     ctx.beat = new Function('ctx', 'with (ctx) {' + src + (gate || beat) + '; return menuPoll; }')(ctx);
@@ -1641,6 +1646,49 @@ function ride(a, name, y0, kos = 0) {
   old.beat(); old.beat(); old.beat(); await settle();
   is(old.asks, 0, 'the gate this replaced really did leave the player on the board from before their run');
   is(old.lbData, was, 'and nothing ever replaced it for the rest of the visit');
+
+  // ---- and the same beat has to notice the UTC day turning over under an open menu ----
+  // The referee stamps every run with a UTC day, so that Today means the same day for everyone, and it
+  // sends the day it used along with the board. The page threw that field away: the gate above re-asks
+  // only for a board that is MISSING or marked behind, so the rows fetched on one UTC day stayed on
+  // screen for the whole visit under a tab reading Today. Measured 19 Oct by driving this same beat an
+  // hour past midnight - 180 beats, ZERO re-asks, the previous day's run still on the Today tab while
+  // the arena's own Today had gone empty. Checked in BOTH directions for the same reason the gate above
+  // is: too few asks is the bug itself, and one ask a beat for ever is a bill on the single Cloudflare
+  // allowance that can actually run out.
+  assert(pg.includes('const utcDay = () => new Date().toISOString().slice(0, 10)'),
+    'the page works out the day the same way the referee does, to the letter');
+  const beats = async (c, n) => { for (let i = 0; i < n; i++) { c.beat(); await settle(); } };
+  const board = (day, rows) => ({day, today: rows, all: was});
+
+  const r = menu(board('2026-10-19', was));
+  r.answer = lands(board('2026-10-20', []));
+  await beats(r, 1);
+  is(r.asks, 0, 'a menu still on the day its board was fetched does not ask for it again');
+  r.day = '2026-10-20';                       // midnight UTC passes with the menu sitting open
+  await beats(r, 1);
+  is(r.asks, 1, 'the turnover is noticed and the board is asked for');
+  is(r.lbData.day, '2026-10-20', 'and the rider is shown the day the arena is actually on');
+  is(r.lbData.today.length, 0, 'whose Today tab is empty, not yesterday evening under the word Today');
+  await beats(r, 180);
+  is(r.asks, 1, 'and an hour of beats on the new day costs nothing further');
+
+  // the way out the other side: a device whose clock is a day off the arena never agrees with the
+  // board that lands, so a bare comparison would re-ask on every beat for the whole visit
+  const skew = menu(board('2026-10-19', was));
+  skew.day = '2026-11-30';                    // a clock a month out
+  skew.answer = lands(board('2026-10-19', was));
+  await beats(skew, 180);
+  is(skew.asks, 1, 'a wrong clock is worth one ask, not one a beat for an hour');
+
+  // red against the gate this replaced
+  const flat = menu(board('2026-10-19', was),
+    'const menuPoll = () => { liveCount(); if (!lbData || lbStale) loadTop(); };');
+  flat.day = '2026-10-20';
+  flat.answer = lands(board('2026-10-20', []));
+  await beats(flat, 180);
+  is(flat.asks, 0, 'the gate this replaced never noticed the day turn over');
+  is(flat.lbData.today.length, 1, 'and left yesterday sitting under a tab reading Today');
 }
 
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');

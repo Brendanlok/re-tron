@@ -332,7 +332,12 @@ function liveCount() {
 const menuUp = () => !$('overlay').hidden && document.visibilityState === 'visible';
 // a board that failed to load is retried on the same beat — /top never starts the tick, so this is
 // as cheap as the count, and it is asked only while the menu is actually on screen
-const menuPoll = () => { liveCount(); if (!lbData || lbStale) loadTop(); };
+const menuPoll = () => {
+  liveCount();
+  // the day turned over while the menu sat here, so the rows on screen are a day old under a tab reading Today
+  if (lbData && lbData.day && lbData.day !== utcDay() && lbDay !== utcDay()) { lbDay = utcDay(); lbStale = true; }
+  if (!lbData || lbStale) loadTop();
+};
 setInterval(() => { if (menuUp()) menuPoll(); }, 20000);
 document.addEventListener('visibilitychange', () => { if (menuUp()) menuPoll(); });
 
@@ -342,7 +347,19 @@ document.addEventListener('visibilitychange', () => { if (menuUp()) menuPoll(); 
 // lbStale: the rows on screen are known to be behind the arena - a run has ended since they were
 // fetched and the re-ask did not get through. The board is only re-asked while that is true, so an
 // idle menu still costs one request a beat rather than two.
-let lbView = 'today', lbData = null, lbStale = false;
+let lbView = 'today', lbData = null, lbStale = false, lbDay = '';
+// The referee stamps every run with a UTC day so that Today means the same day for everyone, and it
+// sends the day it used along with the board. The page threw that field away. The beat above re-asks
+// only for a board that is missing or known to be behind, so the rows fetched on one UTC day stayed on
+// screen for the whole visit under a tab reading Today: measured by driving the real beat an hour past
+// midnight UTC - 180 beats, ZERO re-asks, the previous day's run still on the Today tab while the
+// arena's own Today had gone empty. The only thing that ever put it right was a run ending, because
+// that is the other thing that marks the board behind. Notice the turnover and mark it behind the same
+// way. lbDay is what stops that becoming a bill: a device whose clock is a day out never matches the
+// day the arena sends back, so comparing on every beat alone would re-ask for ever - three requests a
+// minute against the one Cloudflare allowance that can actually run out. Remember the day already
+// asked under, and a mismatch is worth one ask rather than one a beat.
+const utcDay = () => new Date().toISOString().slice(0, 10);   // the referee's own today(), to the letter
 function loadTop() {
   fetch(http('/top')).then(r => r.ok ? r.json() : Promise.reject()).then(d => { lbData = d; lbStale = false; paintLb(); })
     // This used to swallow the failure, so a cold server or a phone on bad signal left the menu with a
