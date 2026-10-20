@@ -101,6 +101,19 @@ def zip_drift(inzip, repo):
     return (['missing: ' + n for n in repo if n not in inzip]
             + ['stale: ' + n for n in repo if n in inzip and inzip[n] != repo[n]])
 
+# Split out so both answers can be asserted offline, the way zip_drift is. The 404 and the stale
+# copy are DIFFERENT faults and the detail has to say which: a 404 means the file never went up or
+# the path moved, a byte mismatch means a push has not landed yet - and Pages catching up is a wait,
+# not a fix, so the line must not send Lok pushing again over a file that is already on its way.
+def asset_verdict(st, live, mine, sha):
+    if st != 200:
+        return False, '%d - nothing served at that path' % st
+    if live == mine:
+        return True, '%d, %db' % (st, len(live))
+    return False, ('%d, live %s %db / repo %s %db - not the copy in this folder: push it, or'
+                   ' give Pages a minute and run this again'
+                   % (st, sha(live), len(live), sha(mine), len(mine)))
+
 # runs before the network checks, so proving it costs nothing: python preflight.py --self-check
 if '--self-check' in sys.argv:
     assert board_todo(JUNK, datetime.date(2026, 10, 3)) == (JUNK, False), 'junk before launch day is not fatal'
@@ -138,6 +151,13 @@ if '--self-check' in sys.argv:
     assert zip_drift({'a': b'1', 'b': b'OLD'}, {'a': b'1', 'b': b'2'}) == ['stale: b'], 'a file the zip has an older copy of is named as stale'
     assert zip_drift({'a': b'1', 'b': b'2', 'spare': b'x'}, {'a': b'1', 'b': b'2'}) == [], 'a spare file in the zip is harmless, not a fault'
     print('ok   zip_drift: tells a file missing from the zip from a stale one, and ignores spares')
+    short = lambda b: hashlib.sha256(b).hexdigest()[:12]
+    assert asset_verdict(200, b'png', b'png', short)[0], 'the file that is served and matches is the healthy case'
+    assert not asset_verdict(404, b'', b'png', short)[0], 'a 404 is a fault'
+    assert not asset_verdict(200, b'OLD', b'png', short)[0], 'served but stale is the hole this closed - 200 is not enough'
+    assert 'nothing served' in asset_verdict(404, b'', b'png', short)[1], 'a 404 must not read as a stale push'
+    assert 'push it' in asset_verdict(200, b'OLD', b'png', short)[1], 'a stale copy must say what to do about it'
+    print('ok   asset_verdict: a served file must MATCH, and a 404 reads differently from a stale push')
     print('ok   board_todo: finds the junk, spares a real run, and only turns fatal on launch day')
     assert verdict([]) == 'all good', 'a clean run still reads all good'
     assert verdict([BOARD]).startswith('NOT YET'), 'the board alone is a job, not a fault'
@@ -193,13 +213,22 @@ detail = got or 'no live branch found in the SERVER line'
 if got != want: detail += ' - expected ' + want
 check('the page opens that same arena', got == want, detail)
 
-# 4. the preview and the icons resolve - a rename leaves these pointing at a 404
+# 4. the preview and the icons resolve, and are the files in this folder - a rename leaves these
+# pointing at a 404, and a push that landed only in part leaves the OLD ones up. Non-empty was all
+# this ever asked, which left a hole in the shape of checks 1 and 2: both of those compare the live
+# bytes to the repo, and this did not. It matters for the one asset nobody can see is stale: og.png
+# grew from 220,986 to 256,212 bytes in f18cf20 on 17 Oct, which left index.html untouched - so
+# check 1 went green on a page that had not changed, check 2 covered the copy inside the zip, and
+# NOTHING on this list could have told you whether the new preview reached Pages at all. The
+# announcement post is then the only thing that tells you, by showing last week's card to everyone
+# who sees the link. Served bytes must equal the file here, the same way the page itself must.
 for a in ASSETS:
     try:
         st, b = get(LIVE + a)
-        check('%s is served' % a, st == 200 and len(b) > 0, '%d, %db' % (st, len(b)))
+        mine = open(a, 'rb').read()
+        check('%s is served, and is the file here' % a, *asset_verdict(st, b, mine, sha))
     except Exception as e:
-        check('%s is served' % a, False, repr(e))
+        check('%s is served, and is the file here' % a, False, repr(e))
 
 # 5. the arena answers the menu's two questions, and neither starts the tick
 for p, key in (('/count', 'on'), ('/top', 'all')):
