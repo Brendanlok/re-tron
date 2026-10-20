@@ -857,7 +857,8 @@ function ride(a, name, y0, kos = 0) {
   const page = {walls: new Map(), bikes: new Map()};
   const socks = new Set();
   let read = 0, joined = 0, seated = 0, turned = 0, orphan = 0, offBoard = 0, shared = 0,
-      over = 0, wallDiff = 0, bikeDiff = 0, threw = null, peak = 0;
+      over = 0, wallDiff = 0, bikeDiff = 0, threw = null, peak = 0,
+      bytes = 0, bcasts = 0, snapBytes = 0;
 
   for (let t = 1; t <= 6000 && !threw; t++) {
     if (rnd() < 0.4) {
@@ -902,17 +903,22 @@ function ride(a, name, y0, kos = 0) {
     for (; read < a.feed.length; read++) {
       const m = a.feed[read];
       if (m.t !== 'k') continue;
+      bytes += Buffer.byteLength(JSON.stringify(m));   // exactly what every rider's phone was sent
+      bcasts++;
       for (const [c, o] of m.a || []) page.walls.set(c, {o, born: m.k});
       for (const id of m.c || []) for (const [c, w] of page.walls) if (w.o === id) page.walls.delete(c);
       for (const [c, w] of page.walls) if (w.born + 80 <= m.k) page.walls.delete(c);
       page.bikes = new Map((m.b || []).map(b => [b[0], b]));
     }
     let n = 0;
+    const snap = [];
     for (let c = 0; c < a.owner.length; c++) if (a.owner[c]) {
       n++;
+      snap.push([c, a.owner[c]]);
       const w = page.walls.get(c);
       if (!w || w.o !== a.owner[c]) wallDiff++;
     }
+    snapBytes += Buffer.byteLength(JSON.stringify(snap));
     if (n !== page.walls.size) wallDiff++;
     if (page.bikes.size !== live.length) bikeDiff++;
     else for (const b of live) { const p = page.bikes.get(b.id); if (!p || p[1] !== b.x || p[2] !== b.y) { bikeDiff++; break; } }
@@ -926,6 +932,21 @@ function ride(a, name, y0, kos = 0) {
   is(orphan, 0, 'no wall outlives the rider who laid it');
   is(wallDiff, 0, 'the page and the arena agree on every wall, every tick');
   is(bikeDiff, 0, 'and on where every bike is');
+  // ---- and what that minute cost the phone it was played on ----
+  // The broadcast goes out ten times a second to every rider, so it is the only thing in this game that
+  // can quietly become expensive to PLAY rather than to run. It stays cheap because walls travel as a
+  // delta - the cells laid on this tick - and the page expires the old ones itself off wallTicks. That
+  // is an easy thing to lose: sending this.walls each tick is the obvious simplification, every test
+  // above would stay green, it looks identical on screen, and the bill lands on the player's data plan
+  // where nobody developing on wifi would ever see it. Measured here rather than asserted: the same
+  // seeded ten minutes carrying the standing walls each tick instead of the delta, which is what the
+  // snap figure is, and the gap between the two numbers is the whole point of the guard.
+  const per = bytes / bcasts, snapPer = (bytes + snapBytes) / bcasts;
+  assert(per < 450, 'a tick costs the rider under 450 bytes (' + per.toFixed(0) + ' B, ' +
+    (bytes / 1024 / 10).toFixed(0) + ' KB a minute of a busy arena)');
+  assert(snapPer > 450, 'and carrying every standing wall each tick instead would blow that (' +
+    snapPer.toFixed(0) + ' B a tick, ' + ((bytes + snapBytes) / 1024 / 1024 / 10 * 60).toFixed(0) +
+    ' MB an hour against ' + (bytes / 1024 / 1024 / 10 * 60).toFixed(0) + ')');
   assert(a.runs.length > 50, 'runs were written down throughout (' + a.runs.length + ')');
   is(a.runs.filter(([, , score, secs, kos]) => score <= 0 || Math.floor(secs) + 10 * kos !== score).length, 0,
     'and every one of them scores its own seconds and knockouts');
