@@ -238,6 +238,18 @@ for p, key in (('/count', 'on'), ('/top', 'all')):
     except Exception as e:
         check('the arena answers %s' % p, False, repr(e))
 
+# 5b. and it has not quietly lost anyone's run. The referee makes two storage calls from inside the
+# tick, and both are guarded now (21 Oct) so a storage fault costs the row it was writing rather than
+# freezing the arena for everyone - but a lost run with no trace is still the silent kind, so the
+# referee counts them and carries the count on /count once it is above zero. Absent is the normal
+# answer; present means runs went missing while the arena was awake and the log is worth reading.
+try:
+    st, b = get(ARENA + '/count')
+    lost = json.loads(b).get('lost', 0) if st == 200 else 0
+    check('no run has gone missing in the arena', not lost, '%d lost since the arena woke' % lost)
+except Exception as e:
+    check('no run has gone missing in the arena', False, repr(e))
+
 # 6. the deployed arena is the server in this folder. This is the quietest failure of the lot: a
 # stale Worker serves a page that looks perfect and plays by last week's rules, and nothing on the
 # screen says so. Compared by date, not by contents - wrangler knows when it last deployed, git

@@ -66,6 +66,9 @@ export class Arena {
     // kind 'say' is a player typing it, kind 'err' is the page reporting its own crash.
     this.sql.exec('CREATE TABLE IF NOT EXISTS notes (kind TEXT, name TEXT, body TEXT, ua TEXT, at INTEGER)');
     this.said = {n: 0, at: 0};
+    // Storage faults inside the tick are invisible from outside otherwise - see kill(). Counted
+    // here rather than in reset(), so the trace outlives the arena it happened in.
+    this.lost = 0;
     this.reset();
   }
   reset() {
@@ -81,9 +84,14 @@ export class Arena {
   async fetch(req) {
     const path = new URL(req.url).pathname;
     // a plain count: it must never start the tick, or asking the question would cost as much as playing
-    if (path === '/count')
-      return Response.json({on: [...this.bikes.values()].filter(b => !b.bot).length},
+    if (path === '/count') {
+      const on = [...this.bikes.values()].filter(b => !b.bot).length;
+      // guarded storage still loses the row, and a lost run with no trace is a silent failure. Carried
+      // on the one cheap path something already asks for, and only once something has actually failed,
+      // so the answer every menu reads is unchanged.
+      return Response.json(this.lost ? {on, lost: this.lost} : {on},
         {headers: {'access-control-allow-origin': '*'}});
+    }
     // the board, read the same cheap way: the menu asks for it without ever waking the arena
     if (path === '/top') return Response.json({day: today(), today: this.top(today()), all: this.top(null)},
       {headers: {'access-control-allow-origin': '*'}});
@@ -233,9 +241,17 @@ export class Arena {
     this.out.e.push([b.id, killer, reason, score, this.tick - b.start, b.kos]);
     if (b.sock) b.sock.bike = null;
     // the referee records the run, so there is no score to forge: the client never sends one
+    // A storage write that throws here took the whole arena down with it, not just this row: it runs
+    // inside step(), so the tick aborted mid-way and nothing past this point ran - and the same dead
+    // rider sat in the same crash on the next tick, so it never recovered. Measured 2026-10-21 on the
+    // real referee: every bike frozen for every rider for as long as anyone stayed, while /count and
+    // /top went on answering 200, which is the exact "answers but cannot be played" hole live-pulse
+    // exists to catch. If storage is broken the row is lost either way; the arena need not be.
     if (!b.bot && b.name && score > 0)
-      this.sql.exec('INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)',
-        today(), b.name, score, Math.round(secs * 10) / 10, b.kos, Date.now());
+      try {
+        this.sql.exec('INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)',
+          today(), b.name, score, Math.round(secs * 10) / 10, b.kos, Date.now());
+      } catch (e) { this.lost++; console.error('run not recorded', e); }
   }
 
   // The name the arena gives a rider who typed none, which on launch day is most of them: the box is
@@ -249,7 +265,12 @@ export class Arena {
   // characters a typed name is cut to.
   riderName(id) {
     const taken = new Set([...this.bikes.values()].map(o => o.name));
-    for (const r of this.sql.exec('SELECT DISTINCT name FROM runs')) taken.add(r.name);
+    // and the same for this read, which is the worse of the two: it runs on every anonymous join, so
+    // a throw froze the arena on the FIRST tick and for everyone. Without the board the walk below
+    // still returns a name nobody in the arena is using - a possible collision with a name on the
+    // board is a far smaller thing than a board nobody can ride on.
+    try { for (const r of this.sql.exec('SELECT DISTINCT name FROM runs')) taken.add(r.name); }
+    catch (e) { this.lost++; console.error('board unreadable', e); }
     // walk from a random start rather than retrying at random: a free number is then always found
     // rather than usually found, and the names still do not read as a counter
     const walk = (span, label) => {

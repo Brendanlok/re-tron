@@ -1738,5 +1738,47 @@ function ride(a, name, y0, kos = 0) {
   is(flat.lbData.today.length, 1, 'and left yesterday sitting under a tab reading Today');
 }
 
+// ---- a storage fault costs the row it was writing and nothing else ----
+// The referee makes two storage calls from INSIDE the tick - the score write in kill() and the board
+// read riderName() does for a rider who typed no name - and neither was guarded. The read is the one
+// that bricked the arena: it runs on every anonymous join, a throw there aborted step() BEFORE any bike
+// moved, and a socket still waiting for a seat is never hung up, so the same crash came round on every
+// tick for as long as anyone stayed. Measured 2026-10-21 on the real referee: 60 ticks out of 60
+// aborted and not one bike moved in six seconds, while the tick counter went on climbing and /count and
+// /top went on answering 200 - the exact "answers but cannot be played" hole live-pulse exists to catch.
+{
+  const quiet = console.error; console.error = () => {};
+  const throwing = re => {
+    const feed = [];
+    const sql = {exec: q => { if (re.test(q)) throw new Error('SQLITE_FULL'); return []; }};
+    const a = new Arena({storage: {sql}});
+    const real = a.spawn.bind(a);
+    a.spawn = (n, bot) => bot ? null : real(n, bot);   // no bots hunting the test bike
+    a.socks.add({ws: {send: t => feed.push(JSON.parse(t))}, bike: {alive: true}, count: 0, windowAt: Date.now()});
+    a.feed = feed;
+    return a;
+  };
+  const ticks = (a, n) => { let dead = 0; for (let i = 0; i < n; i++) try { a.step(); } catch (e) { dead++; } return dead; };
+
+  // the read: an anonymous rider waiting for a seat while the board cannot be read
+  const r = throwing(/^SELECT DISTINCT/);
+  const {b: on} = rider(r, 'NAMED', 2, 2, 'R');
+  const waiter = {ws: {send() {}}, bike: null, count: 0, windowAt: Date.now(), waiting: ''};
+  r.socks.add(waiter);
+  is(ticks(r, 5), 0, 'a board the referee cannot read does not abort the tick');
+  is(on.x - 2, 5, 'so the riders already in the arena keep moving');
+  assert(waiter.bike && /^RIDER/.test(waiter.bike.name), 'and the rider who typed no name is still given one and seated');
+  is(r.lost, 1, 'the fault is counted rather than swallowed');
+
+  // the write: a rider who scored, whose row cannot be stored
+  const w = throwing(/^INSERT INTO runs/);
+  const {b: doomed} = rider(w, 'DOOM', 12, 20, 'L');   // 12 cells of road, so the run is worth a point
+  const {b: other} = rider(w, 'BYST', 2, 40, 'R');
+  is(ticks(w, 20), 0, 'a score the referee cannot store does not abort the tick either');
+  assert(!doomed.alive, 'the rider is still knocked out');
+  is(other.x - 2, 20, 'and everyone else rides on through the tick it failed on');
+  is(w.feed.length, 20, 'no rider loses a tick of the arena over it');
+  is(w.lost, 1, 'and the lost run is counted, because a run lost with no trace is the silent kind');
+}
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
