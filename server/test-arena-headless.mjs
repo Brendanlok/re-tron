@@ -1811,5 +1811,60 @@ function ride(a, name, y0, kos = 0) {
   is(w.feed.length, 20, 'no rider loses a tick of the arena over it');
   is(w.lost, 1, 'and the lost run is counted, because a run lost with no trace is the silent kind');
 }
+
+// ---- and a storage fault on the REQUEST path answers a refusal, not a 500 nobody can read ----
+// The guards above cover the two calls inside step(). The other four are on the request path - the board
+// read behind /top, the note write behind /say, and the two admin lists - and a throw there does not
+// land in the tick at all: it lands in the Durable Object fetch handler, which Cloudflare turns into a
+// 500 of its own HTML with none of the CORS headers these paths set. Measured 2026-10-22 on the real
+// referee with a store that throws: /top, /say and /board all threw straight out of fetch() and
+// this.lost stayed 0, so the fault left no trace anywhere while /count went on answering on:0. The page
+// is not the problem - it already reads both a refusal and a dropped request as failure - so what the
+// 503 buys is the count admitting it, which is the only way anyone outside the object finds out.
+{
+  const quiet = console.error; console.error = () => {};
+  const broken = re => {
+    const sql = {exec: q => { if (re.test(q)) throw new Error('SQLITE_IOERR'); return []; }};
+    return new Arena({storage: {sql}});
+  };
+  const hit = async (a, path, init) => {
+    try {
+      const r = await a.fetch(new Request('https://arena.test' + path, init));
+      return {status: r.status, cors: r.headers.get('access-control-allow-origin'), body: await r.text()};
+    } catch (e) { return {threw: e.message}; }
+  };
+  const note = {method: 'POST', body: JSON.stringify({body: 'the blade button does nothing'})};
+
+  // the board every menu view asks for, on a store that cannot be read
+  const t = broken(/^SELECT name/);
+  const top = await hit(t, '/top');
+  is(top.threw, undefined, 'a board the referee cannot read does not throw out of fetch()');
+  is(top.status, 503, 'the menu is refused rather than sent a 500 page nobody set a header on');
+  is(top.cors, '*', 'and the refusal carries the header, so the page reads a status and not a CORS failure');
+  is(t.lost, 1, 'the fault is counted');
+  const cnt = await hit(t, '/count');
+  is(cnt.status, 200, 'the count still answers, because it touches no storage at all');
+  is(cnt.body, '{"on":0,"lost":1}', 'and carries the trace - the only way anyone outside ever finds out');
+
+  // a player crash report, on a store that cannot be written
+  const s = broken(/^INSERT INTO notes/);
+  const said = await hit(s, '/say', note);
+  is(said.threw, undefined, 'a note the referee cannot store does not throw out of fetch() either');
+  is(said.status, 503, 'the report is refused, which is what gives the page its retry back');
+  is(said.cors, '*', 'with the header this endpoint sets on every other answer it gives');
+  is(s.lost, 1, 'and the dropped report is counted, because a report filed nowhere is the silent kind');
+
+  // the admin lists, which are the paths Lok himself reads on launch morning
+  is((await hit(broken(/^SELECT day/), '/board')).status, 503, 'the board list refuses rather than 500s');
+  is((await hit(broken(/^SELECT kind/), '/inbox')).status, 503, 'and so does the inbox');
+
+  // and nothing changed for a healthy arena
+  const ok = new Arena({storage: {sql: {exec: () => []}}});
+  is((await hit(ok, '/top')).status, 200, 'a working store still answers the board with a 200');
+  is((await hit(ok, '/say', note)).body, 'ok', 'and still takes the note');
+  is((await hit(ok, '/count')).body, '{"on":0}', 'and the count says nothing about faults that never happened');
+  is(ok.lost, 0, 'nothing is counted that did not fail');
+  console.error = quiet;
+}
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);

@@ -92,19 +92,42 @@ export class Arena {
       return Response.json(this.lost ? {on, lost: this.lost} : {on},
         {headers: {'access-control-allow-origin': '*'}});
     }
-    // the board, read the same cheap way: the menu asks for it without ever waking the arena
-    if (path === '/top') return Response.json({day: today(), today: this.top(today()), all: this.top(null)},
-      {headers: {'access-control-allow-origin': '*'}});
-    if (path === '/say') return this.say(req);
-    // clearing the board. GET lists every run; POST ?wipe=1 empties it and POST ?name=RIDER drops that
-    // rider's runs, then both list what is left. Removing anything needs a POST, so nothing that merely
-    // follows the link — a preview, a prefetch, a bookmark — can empty the board by accident.
-    if (path === '/board') return this.board(req);
-    // the inbox, cleaned the same way as the board: GET lists it, POST ?name=WRITER drops that
-    // writer's notes. This used to say filtering could wait, and that stopped being true the day the
-    // launch checklist started filing a note of its own on every run - by launch morning there are
-    // more of those sitting on top of the list than there are player reports underneath it.
-    if (path === '/inbox') return this.inbox(req);
+    // EVERY PATH BELOW TOUCHES STORAGE, and none of them was guarded. The two calls inside step() were
+    // (kill and riderName, 2026-10-21), but a throw on this side does not land in the tick - it lands in
+    // the Durable Object's fetch, and Cloudflare turns that into a 500 of its own HTML with none of the
+    // CORS headers these paths set. Measured 2026-10-22 against the real referee with a store that
+    // throws: /top, /say and /board all threw straight out of fetch(), and this.lost stayed 0 while
+    // /count went on answering {"on":0} as if nothing were wrong. So a storage fault on the request
+    // path left NO trace anywhere - which is the half yesterday's fix did not reach, on the very
+    // surface whose own comment says it must not answer 500 the day something genuinely breaks.
+    // WHAT IT COSTS THE PLAYER, and it is different on each path. The board is the lie: the menu shows
+    // its "didn't load" line, which reads as a cold server rather than as a board nobody can write to.
+    // The report is the loss: the page reads a failed /say as a reason to give the slot back and fire
+    // again, nine attempts and then nothing for the rest of the visit, having filed the crash nowhere.
+    // 503 WITH THE CORS HEADER reads to the page exactly as the dropped request already did - the board
+    // keeps its line, the report keeps its retry, no player sees anything new - while the count finally
+    // admits it, which is the only way anyone outside this object ever finds out.
+    try {
+      // the board, read the same cheap way: the menu asks for it without ever waking the arena
+      if (path === '/top') return Response.json({day: today(), today: this.top(today()), all: this.top(null)},
+        {headers: {'access-control-allow-origin': '*'}});
+      // awaited rather than handed straight back: say() is async, so its rejection would sail past a
+      // sync catch and be the same uncaught 500 all over again
+      if (path === '/say') return await this.say(req);
+      // clearing the board. GET lists every run; POST ?wipe=1 empties it and POST ?name=RIDER drops that
+      // rider's runs, then both list what is left. Removing anything needs a POST, so nothing that merely
+      // follows the link — a preview, a prefetch, a bookmark — can empty the board by accident.
+      if (path === '/board') return this.board(req);
+      // the inbox, cleaned the same way as the board: GET lists it, POST ?name=WRITER drops that
+      // writer's notes. This used to say filtering could wait, and that stopped being true the day the
+      // launch checklist started filing a note of its own on every run - by launch morning there are
+      // more of those sitting on top of the list than there are player reports underneath it.
+      if (path === '/inbox') return this.inbox(req);
+    } catch (e) {
+      this.lost++; console.error('storage fault on ' + path, e);
+      return new Response('the arena cannot reach its storage', {status: 503,
+        headers: {'access-control-allow-origin': '*'}});
+    }
     const pair = new WebSocketPair(), ws = pair[1];
     ws.accept();
     const s = {ws, bike: null, count: 0, windowAt: Date.now(), idle: 0};
