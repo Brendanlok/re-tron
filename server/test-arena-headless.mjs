@@ -418,7 +418,10 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   assert(a.socks.has(ghost), 'a bikeless socket is left alone for 30s');
   a.step();
   assert(!a.socks.has(ghost) && closed.includes('ghost'), 'and hung up on just after');
-  assert(a.socks.has(queued), 'a socket still waiting for room to ride is never hung up on');
+  // A socket still WAITING for a seat used to be exempt from the whole guard, and that was the one way
+  // left for a bikeless socket to hold the arena - and the bill - open for ever. It protected nobody:
+  // the page closes its own socket after 10s of not riding, and 300 ticks is 300 retries of trySpawn.
+  assert(!a.socks.has(queued) && closed.includes('queued'), 'a socket the referee could not seat in 30s goes too');
 
   const b = new (a.constructor)({storage: {sql: {exec: () => []}}});
   const lone = {ws: {send() {}, close() {}}, bike: null, count: 0, windowAt: Date.now(), idle: 0};

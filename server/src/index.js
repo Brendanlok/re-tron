@@ -353,11 +353,21 @@ export class Arena {
 
   step() {
     // The page hangs up the moment its rider is knocked out. A socket still here 30s later with no bike
-    // and not waiting for one is a phone that lost signal without saying goodbye (no close ever arrives),
-    // or someone holding the arena open on purpose - either way it would keep this tick, and the bill,
-    // running for nobody. Hang up on it ourselves.
+    // is a phone that lost signal without saying goodbye (no close ever arrives), or someone holding the
+    // arena open on purpose - either way it would keep this tick, and the bill, running for nobody.
+    // Hang up on it ourselves.
+    // A socket still WAITING for a seat used to be exempt from this, and that exemption was the one way
+    // left for a socket with no bike to hold the arena - and the bill - open for ever. Measured
+    // 2026-10-21 on the real referee: one socket with a join the referee could not seat sat through 1200
+    // ticks with its idle counter pinned at 0, the tick climbing and the timer running, while the same
+    // socket without a pending join was hung up on at 300 and the arena stopped. Invisible from outside,
+    // too: /count reports non-bot BIKES, so it answers on:0 the whole time an arena like that is awake.
+    // The exemption protected nobody - the page gives up and closes after 10s of not riding, and 300
+    // ticks is 300 retries of trySpawn; measured over 300s of twelve riders all blading, not one join
+    // waited even a single tick. A board that cannot seat anyone for 30s is not a queue to be patient
+    // with.
     for (const s of this.socks) {
-      s.idle = (s.bike && s.bike.alive) || s.waiting !== undefined ? 0 : (s.idle || 0) + 1;
+      s.idle = s.bike && s.bike.alive ? 0 : (s.idle || 0) + 1;
       if (s.idle > IDLE_TICKS) { try { s.ws.close(1000, 'idle'); } catch (e) {} this.drop(s); }
     }
     if (!this.socks.size) return;   // that was the last one: stop() has already reset the arena
