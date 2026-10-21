@@ -461,6 +461,34 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   assert(!b.alive, 'a bike that is told nonsense still dies at the edge like any other');
 }
 
+// ---- a message that parses but is not an object is dropped, rather than thrown out of the handler ----
+// The same gate as above, one step earlier. JSON.parse only throws on text that is not JSON, so the
+// try/catch around it caught 'not json' and let 'null' straight through - and every branch of onMsg
+// then reads m.t off it. Measured 2026-10-21 against a real wrangler dev arena before the guard went
+// in: the sender's socket was closed with an abnormal 1006 and no reason, mid-run, which the page can
+// only show as DISCONNECTED. The other rider in the arena kept every tick, so the arena itself was
+// never at risk - but a live bike lost its seat to four bytes, and raw is the one thing here a
+// stranger writes. Driven through onMsg exactly as the socket would deliver it, strings and all.
+{
+  const a = arena();
+  const {b} = rider(a, 'LOK', 10, 10, 'R');
+  const s = b.sock;
+  for (const raw of ['null', '"turn"', '42', 'true', '[]']) {
+    s.windowAt = Date.now();  s.count = 0;   // the flood guard counts per second, and this loop is faster
+    let threw = null;
+    try { a.onMsg(s, raw); } catch (e) { threw = String(e); }
+    is(threw, null, 'raw ' + raw + ' is dropped rather than thrown out of the handler');
+  }
+  // an array answers for nothing onMsg asks about, so it must leave the bike exactly as it was
+  s.windowAt = Date.now(); s.count = 0;
+  a.onMsg(s, '[]');
+  is(b.queue.length, 0, 'and none of them reaches the turn queue');
+  for (let i = 0; i < 5; i++) a.step();
+  is(b.dir, 'R', 'the bike keeps the heading it had');
+  is(b.x, 15, 'having ridden on exactly as if nothing was said');
+  assert(b.alive && a.socks.has(s), 'and the rider still has the seat the throw used to cost them');
+}
+
 // ---- the rules the turn gate itself enforces: no reversal, no no-op, and a queue that cannot flood ----
 // The steering rule the whole game rests on, and it had never been checked. A reversal has to be
 // refused or the blade makes the game unplayable: flip 180 with the blade out and the bike's next

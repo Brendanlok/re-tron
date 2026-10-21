@@ -124,6 +124,14 @@ export class Arena {
     if (now - s.windowAt > 1000) { s.windowAt = now; s.count = 0; }
     if (++s.count > 40 || typeof raw !== 'string' || raw.length > 200) return;   // flood guard
     let m; try { m = JSON.parse(raw); } catch (e) { return; }
+    // JSON.parse only throws on text that is not JSON. 'null' IS JSON, so it sailed past the catch and
+    // every branch below reads m.t off it - a TypeError thrown out of the websocket's message handler.
+    // Measured 2026-10-21 against a real wrangler dev arena: the rider who sent it was cut off at once
+    // with an abnormal 1006 close and no reason, which the page can only read as "the arena dropped
+    // out". Everyone else kept their tick, so this is one seat rather than the arena - but it is a
+    // four-byte message, and this handler is the one thing a stranger can reach that holds a live bike.
+    // Nothing the page sends is anything but an object, so that is what the gate asks for.
+    if (!m || typeof m !== 'object') return;
     const b = s.bike && s.bike.alive ? s.bike : null;
     if (m.t === 'join' && !b) {
       // bikes AND the sockets already let in and still waiting for room: on a crowded board spawn()
