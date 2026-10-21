@@ -1,8 +1,14 @@
 // How lively is an arena of nothing but bots? Most players arrive to one, so that first minute is
 // the whole first impression. Runs the referee headlessly - no network, no browser - and reports
 // how often bikes go down, what takes them down, and how long they last.
-// Measured 20 Sep over 5 runs of 10 arena-minutes each: about 4 knockouts a minute, roughly half of
-// them a bot riding into its own blade, median life around 50s with a tail past 5 minutes.
+// Measured 21 Oct over 6 runs of 10 arena-minutes each: 2.8-3.5 knockouts a minute (median 3.2, so one
+// every 19s), about a third of them a bot riding into its own blade, median life 50-105s with a tail
+// past 6 minutes, and a tick costing 0.3ms of its 100ms.
+// The baseline this replaces was taken on 20 Sep and read 4 a minute with HALF the knockouts self-
+// inflicted. It went stale three days later and stayed wrong for a month: 017ab60 on 23 Sep stopped
+// bots riding into loops they had just closed, so the self-blade share fell by half and the arena is
+// quieter because that fix works, not because anything regressed. Re-measure here when think() changes,
+// or the next reading gets judged against a number from before the last fix.
 // Run before and after any change to think(): one run is noisy, five tell you something.
 import {Arena} from './src/index.js';
 
