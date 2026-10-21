@@ -351,6 +351,17 @@ export class Arena {
     if (now - this.said.at > 60000) this.said = {n: 0, at: now};
     if (++this.said.n > 30) return new Response('slow down', {status: 429, headers: cors});
     let m; try { m = JSON.parse(await req.text()); } catch (e) { return new Response('bad', {status: 400, headers: cors}); }
+    // The same four bytes that threw a rider off their bike this morning, on the other half of the
+    // surface: 'null' IS valid JSON, so it sails past the catch above and `m.body` on the next line is
+    // a TypeError thrown out of the Durable Object's fetch handler. Measured 2026-10-21 against a real
+    // wrangler dev arena with two riders on it, because the blast radius had to be measured rather than
+    // assumed: the riders kept every tick and /count never moved, so this is the one request and not the
+    // arena. What it does cost is the shape of the answer - Cloudflare turns the throw into a 500 of its
+    // own HTML with none of the CORS headers this endpoint sets, so a browser reads it as a network
+    // failure rather than a refusal. This is the one path a stranger can write to, and the one path a
+    // real storage fault would also surface on; it must not answer 500 to a malformed body, or the day
+    // something genuinely breaks here the 500 will look like business as usual. Same gate as onMsg.
+    if (!m || typeof m !== 'object') return new Response('bad', {status: 400, headers: cors});
     const cut = (v, n) => String(v === undefined || v === null ? '' : v).slice(0, n);
     const body = cut(m.body, 600).trim();
     if (!body) return new Response('empty', {status: 400, headers: cors});

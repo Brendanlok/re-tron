@@ -11,13 +11,13 @@ const LOCAL = /^wss?:\/\/(localhost|127\.0\.0\.1|\[::1\])([:/]|$)/.test(URL_);
 if (!LOCAL && !FORCE) {
   console.log('refusing to run against ' + URL_);
   console.log('That is not a local arena, and this test WRITES: it would leave LOK and TWO rows on the');
-  console.log('all-time board that only the ADMIN secret can remove.');
+  console.log('all-time board, and an ARENATST note in the player inbox, that only the ADMIN secret can remove.');
   console.log('Start a local arena instead - npx wrangler dev in server/ - then:');
   console.log('  node server/test-arena.mjs ws://localhost:8787/ws');
   console.log('If you really do mean to write to the live board, pass --live.');
   process.exit(1);
 }
-if (!LOCAL) console.log('!! LIVE ARENA ' + URL_ + ' - this run will leave LOK and TWO rows on the all-time board.');
+if (!LOCAL) console.log('!! LIVE ARENA ' + URL_ + ' - this run will leave LOK and TWO rows on the all-time board and an ARENATST note in the inbox.');
 const COUNT_ = URL_.replace(/^ws/, 'http').replace(/\/ws$/, '/count');
 const count = async () => (await fetch(COUNT_)).json();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -92,6 +92,24 @@ assert(B.you && A.ticks[A.ticks.length - 1].b.some(b => b[0] === B.you), 'A sees
 const bid = B.you; B.ws.close(); await sleep(600);
 assert(!A.ticks[A.ticks.length - 1].b.some(b => b[0] === bid), 'B leaving removes their bike');
 assert(A.events.some(e => e[0] === bid && e[2] === 'left'), 'leaving is reported as left');
+
+// /say is the one path a stranger can write to, and the only part of the HTTP surface that was never
+// fuzzed. 'null' IS valid JSON, so it got past JSON.parse and reading .body off it threw out of the
+// Durable Object's fetch handler; Cloudflare turned that into a 500 of its own HTML carrying none of
+// the CORS headers this endpoint sets, so a browser could only read a refusal as a network failure.
+// Checked with a rider on the arena because the blast radius was measured rather than assumed - the
+// riders kept every tick, so this is the one request and not the arena, and the last assert says so.
+const SAY_ = COUNT_.replace(/\/count$/, '/say');
+const say = raw => fetch(SAY_, {method: 'POST', body: raw});
+const sayTicks = A.ticks.length;
+const refused = await say('null');
+assert(refused.status === 400, 'four bytes of JSON that is not an object are refused, not a 500 (' + refused.status + ')');
+assert(refused.headers.get('access-control-allow-origin') === '*', 'and the refusal carries CORS, so the page reads a refusal rather than a dead network');
+assert((await say('{"name":"ARENATST","body":"arena test suite, ignore"}')).status === 200, 'a real report still gets through');
+assert((await say('{}')).status === 400, 'and an empty note is still refused');
+await sleep(400);
+assert(A.ticks.length > sayTicks, 'the riders kept their tick through all of it (+' + (A.ticks.length - sayTicks) + ')');
+
 A.ws.close();
 await sleep(600);
 
