@@ -286,7 +286,18 @@ let waves = [], shake = 0;   // the rings a crash throws off, and the kick your 
 // The socket is open only while riding. The arena ticks ten times a second for as long as anyone
 // is connected, so a tab left sitting on the menu used to keep the whole arena running for nothing.
 function connect() {
-  const sock = ws = new WebSocket(SERVER);
+  // The constructor can THROW rather than fail through onerror: a Content Security Policy on a page that
+  // embeds the game (itch serves it inside an iframe) refuses the socket with a SecurityError before there
+  // is anything to hang a handler on. Unguarded, that threw straight out of the click handler, so Start
+  // stayed disabled under "connecting..." for good - no message, no 10s timeout (it is scheduled below the
+  // throw), and no way back to the menu but a reload. Say the same thing a dead server says.
+  let sock;
+  try { sock = ws = new WebSocket(SERVER); }
+  catch (e) {
+    ws = null; menuReady();
+    $('startSub').textContent = 'could not reach the arena — try again';
+    return;
+  }
   bikes.clear(); walls.clear();   // the menu's pretend riders go before the real arena arrives
   // forget last run's bike: until 'you' arrives, a stranger on that old id crashing would end this run
   me = 0;
