@@ -256,10 +256,19 @@ for p, key in (('/count', 'on'), ('/top', 'all')):
 # freezing the arena for everyone - but a lost run with no trace is still the silent kind, so the
 # referee counts them and carries the count on /count once it is above zero. Absent is the normal
 # answer; present means runs went missing while the arena was awake and the log is worth reading.
+# The same answer now carries a second trace, added 2026-10-22: notes the /say guards REFUSED. That is
+# not a storage fault, so it is not a run going missing and it does not fail this check - a flood being
+# turned away is the arena behaving correctly. But a refusal used to leave no mark at all, and the
+# player's end of one is 'could not send, try again in a moment', which almost nobody does - so if this
+# number is above zero, somebody tried to tell us something and the arena said no. Worth reading the
+# log, and worth knowing before the inbox looks quieter than the day actually was.
 try:
     st, b = get(ARENA + '/count')
-    lost = json.loads(b).get('lost', 0) if st == 200 else 0
-    check('no run has gone missing in the arena', not lost, '%d lost since the arena woke' % lost)
+    d = json.loads(b) if st == 200 else {}
+    lost, turned = d.get('lost', 0), d.get('turned', 0)
+    check('no run has gone missing in the arena', not lost,
+          '%d lost since the arena woke' % lost
+          + (', and %d note(s) refused by the flood guards - read the log' % turned if turned else ''))
 except Exception as e:
     check('no run has gone missing in the arena', False, repr(e))
 

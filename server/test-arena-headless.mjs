@@ -2028,5 +2028,48 @@ async function joinSnapshot(a) {
   is(snap[0][2], a.born[cell], 'with the birth tick of the wall that is actually there');
 }
 
+// ---- a note the arena REFUSES leaves a trace, the same way a note it cannot store does ----
+// The guards on /say are the one place the arena says no to a player on purpose, and until now saying no
+// left no mark anywhere: a refusal is not a storage fault, so it is not in this.lost, and the count went
+// on answering on:0 as if every note ever sent had landed. The player's end of it is 'could not send, try
+// again in a moment', which almost nobody does - so the only channel there is for hearing from players
+// could turn people away all launch day with nobody the wiser. Counted beside the lost rows and carried
+// on the same cheap path, which is the only way anyone outside this object ever finds out.
+{
+  const a = arena();
+  const post = (kind, body) => a.say(new Request('http://x/say', {method: 'POST',
+    body: JSON.stringify({kind, body}), headers: {'content-type': 'text/plain'}}));
+  const count = async () => JSON.parse(await (await a.fetch(new Request('https://arena.test/count'))).text());
+
+  is((await post('say', 'the blade button does nothing')).status, 200, 'a note that lands is not a refusal');
+  is((await count()).turned, undefined, 'so the count says nothing - absent is the normal answer');
+
+  // the player's own allowance, spent by the player: thirty in the minute and the thirty-first refused
+  for (let i = 0; i < 29; i++) await post('say', 'note ' + i);
+  is((await post('say', 'one too many')).status, 429, 'the thirty-first note in the minute is turned away');
+  is((await count()).turned, 1, 'and the refusal is counted, because a note refused in silence is the silent kind');
+
+  // the page's own reports have their own allowance, and a refusal there counts too - it is still
+  // something the arena would not take, and the number is the only thing that ever says so
+  a.said = {n: 0, say: 0, err: 0, at: Date.now()};
+  for (let i = 0; i < 20; i++) await post('err', 'boom ' + i);
+  is((await post('err', 'and another')).status, 429, 'the twenty-first crash report in the minute is turned away');
+  is((await count()).turned, 2, 'and it is on the same count');
+
+  // and the ceiling, which fires before a stranger's body is ever read - the one a real flood hits
+  a.said = {n: 60, say: 0, err: 0, at: Date.now()};
+  is((await post('say', 'past the ceiling')).status, 429, 'a flood is stopped at the ceiling');
+  is((await count()).turned, 3, 'and counted there as well, so no refusal is invisible');
+
+  // a new minute hands the allowances back but not the trace: the count is what the arena has done
+  // since it woke, not what it is doing this minute, exactly like this.lost beside it
+  a.said = {n: 0, say: 0, err: 0, at: Date.now()};
+  is((await post('say', 'next minute')).status, 200, 'a new minute lets the next note through');
+  is((await count()).turned, 3, 'while the trace stays, so a quiet minute cannot hide a loud one');
+  is((await count()).on, 0, 'and the field the menu actually reads is untouched');
+  is(a.lost, 0, 'nothing is counted as a lost row: a refusal is not a storage fault');
+  is(a.timer, null, 'and none of it started the arena ticking, which is what would cost money');
+}
+
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);

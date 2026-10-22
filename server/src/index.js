@@ -71,6 +71,15 @@ export class Arena {
     // Storage faults inside the tick are invisible from outside otherwise - see kill(). Counted
     // here rather than in reset(), so the trace outlives the arena it happened in.
     this.lost = 0;
+    // And the other way the arena can go quiet on a player, which the comment on say()'s own guard
+    // admitted was invisible: a note the flood guards REFUSE is not a storage fault, so it is not in
+    // this.lost, and nothing anywhere said it had happened. The two allowances were split by kind on
+    // 2026-10-22 so the page's crash reports cannot drown out the players - but a player who was
+    // refused still reads 'could not send, try again in a moment' and almost nobody does, and the only
+    // channel there is for hearing from players had turned them away with nobody the wiser. Counted
+    // beside this.lost and carried the same cheap way, for the same reason: it is the only way anyone
+    // outside this object ever finds out.
+    this.turned = 0;
     this.reset();
   }
   reset() {
@@ -91,8 +100,12 @@ export class Arena {
       // guarded storage still loses the row, and a lost run with no trace is a silent failure. Carried
       // on the one cheap path something already asks for, and only once something has actually failed,
       // so the answer every menu reads is unchanged.
-      return Response.json(this.lost ? {on, lost: this.lost} : {on},
-        {headers: {'access-control-allow-origin': '*'}});
+      // built field by field rather than as one ternary, so a second trace does not double the shapes
+      // this answers in: absent is the normal answer for both, and the menu reads nothing but `on`.
+      const r = {on};
+      if (this.lost) r.lost = this.lost;
+      if (this.turned) r.turned = this.turned;
+      return Response.json(r, {headers: {'access-control-allow-origin': '*'}});
     }
     // EVERY PATH BELOW TOUCHES STORAGE, and none of them was guarded. The two calls inside step() were
     // (kill and riderName, 2026-10-21), but a throw on this side does not land in the tick - it lands in
@@ -391,7 +404,7 @@ export class Arena {
     // only thing that can be judged before the body is read: req.text() has no size of its own, and the
     // kind the allowances below are spent from is inside it. Set above the fifty the two of them can
     // spend together, so it binds on a flood and never on real traffic.
-    if (++this.said.n > 60) return new Response('slow down', {status: 429, headers: cors});
+    if (++this.said.n > 60) { this.turned++; return new Response('slow down', {status: 429, headers: cors}); }
     let m; try { m = JSON.parse(await req.text()); } catch (e) { return new Response('bad', {status: 400, headers: cors}); }
     // The same four bytes that threw a rider off their bike this morning, on the other half of the
     // surface: 'null' IS valid JSON, so it sails past the catch above and `m.body` on the next line is
@@ -422,8 +435,10 @@ export class Arena {
     // ponytail: a slice each, not per-writer limiting - there is no identity here to limit by, and the
     // kind is the client's word anyway. Someone malicious just says 'say'; the ceiling above is what
     // answers for them. This is about the honest page not shouting over its own players.
-    if (++this.said[kind] > (kind === 'err' ? 20 : 30))
+    if (++this.said[kind] > (kind === 'err' ? 20 : 30)) {
+      this.turned++;
       return new Response('slow down', {status: 429, headers: cors});
+    }
     this.sql.exec('INSERT INTO notes VALUES (?, ?, ?, ?, ?)',
       kind, cut(m.name, 8), body, cut(req.headers.get('user-agent'), 160), now);
     return new Response('ok', {headers: cors});
