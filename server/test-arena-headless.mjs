@@ -1966,5 +1966,67 @@ function ride(a, name, y0, kos = 0) {
   is(ok.lost, 0, 'nothing is counted that did not fail');
   console.error = quiet;
 }
+
+// ---- a rider who joins an arena mid-flight is handed the walls that are already standing ----
+// Bikes travel in full on every tick; walls travel as a delta, and that is deliberate - the soak above
+// exists to keep it that way. So the ONE thing between a second rider and a floor of invisible
+// barricades is the snapshot in the 'hi' message, sent once as the socket opens, and nothing had ever
+// tested it. A break there has the worst shape this game can produce: the rider is shown clear road,
+// rides into a wall that is really there, and is knocked out by nothing - with the referee perfectly
+// correct about it, so no check that reads the server's own state would ever see a problem.
+// The snapshot is FILTERED, which is the half that would rot quietly. this.walls keeps an entry for
+// every cell ever laid, including ones that are no longer anybody's: kill() hands a dead rider's cells
+// back and leaves its entries behind, and a cell since re-laid by someone else carries two entries.
+// Both exclusions are pinned below.
+// Driving the real fetch() rather than rebuilding the payload, because a copy of that expression would
+// agree with itself whatever it said. Two node facts are in the way: there is no WebSocketPair, and
+// node's Response refuses status 101 - the stub stands in for the first, and the second throws AFTER
+// hi has been sent, so it is caught and the arena's timer stopped by hand.
+async function joinSnapshot(a) {
+  const sent = [];
+  globalThis.WebSocketPair = function () {
+    const ws = {accept() {}, addEventListener() {}, send: t => sent.push(t)};
+    return {0: ws, 1: ws};
+  };
+  try { await a.fetch({url: 'https://arena.test/ws'}); }
+  catch (e) { if (!(e instanceof RangeError)) throw e; }   // the 101, which node will not build
+  clearInterval(a.timer); a.timer = null;   // not stop(): that resets the arena we are about to read
+  const hi = sent.map(t => JSON.parse(t)).find(m => m.t === 'hi');
+  if (!hi) throw new Error('the socket was opened and no hi was sent');
+  return hi.walls;
+}
+{
+  const a = arena();
+  const {b, say} = rider(a, 'ONE', 10, 10, 'R');
+  say({t: 'blade', on: true});
+  for (let i = 0; i < 4; i++) a.step();
+  is(standing(a, b.id), 4, 'the rider already out there has four cells of barricade standing');
+  const snap = await joinSnapshot(a);
+  is(snap.length, 4, 'and a rider joining now is handed all four, not an empty floor');
+  assert(snap.every(([c, o, born]) => o === b.id && a.owner[c] === o && a.born[c] === born),
+    'each with the owner and the birth tick the referee holds for that cell');
+}
+{
+  const a = arena();
+  const cell = 10 * 40 + 10;   // (10,10) on the 40x60 board
+  const {b: first, say} = rider(a, 'ONE', 10, 10, 'R');
+  say({t: 'blade', on: true});
+  a.step();   // lays the cell it was standing on, then rides out of it
+  is(a.owner[cell], first.id, 'the first rider lays the cell it started on');
+  a.kill(first, 0, 'left');
+  is(a.owner[cell], 0, 'a knockout hands that cell straight back to the floor');
+  is(a.walls.filter(([c]) => c === cell).length, 1, 'while the entry for it stays in this.walls');
+  is((await joinSnapshot(a)).length, 0, 'and a rider joining now is handed nothing - a dead rider owns no walls');
+
+  const {b: second, say: say2} = rider(a, 'TWO', 10, 10, 'R');
+  say2({t: 'blade', on: true});
+  a.step();
+  is(a.walls.filter(([c]) => c === cell).length, 2, 'the same cell re-laid by someone else carries two entries');
+  const snap = await joinSnapshot(a);
+  is(snap.length, 1, 'but the snapshot carries that cell once rather than twice');
+  is(snap[0][1], second.id, 'and under the rider who owns it now');
+  is(snap[0][2], a.born[cell], 'with the birth tick of the wall that is actually there');
+}
+
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
 process.exit(bad ? 1 : 0);
