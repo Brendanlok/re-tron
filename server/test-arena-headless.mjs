@@ -1944,7 +1944,10 @@ function ride(a, name, y0, kos = 0) {
   is(t.lost, 1, 'the fault is counted');
   const cnt = await hit(t, '/count');
   is(cnt.status, 200, 'the count still answers, because it touches no storage at all');
-  is(cnt.body, '{"on":0,"lost":1}', 'and carries the trace - the only way anyone outside ever finds out');
+  // seconds-awake is stripped rather than matched: it is always there and it is a clock, so the exact
+  // shape of everything that is NOT a clock is still what this asserts
+  is(cnt.body.replace(/"up":[0-9]+,/, ''), '{"on":0,"lost":1}',
+    'and carries the trace - the only way anyone outside ever finds out');
 
   // a player crash report, on a store that cannot be written
   const s = broken(/^INSERT INTO notes/);
@@ -1962,7 +1965,8 @@ function ride(a, name, y0, kos = 0) {
   const ok = new Arena({storage: {sql: {exec: () => []}}});
   is((await hit(ok, '/top')).status, 200, 'a working store still answers the board with a 200');
   is((await hit(ok, '/say', note)).body, 'ok', 'and still takes the note');
-  is((await hit(ok, '/count')).body, '{"on":0}', 'and the count says nothing about faults that never happened');
+  is((await hit(ok, '/count')).body.replace(/,"up":[0-9]+/, ''), '{"on":0}',
+    'and the count says nothing about faults that never happened');
   is(ok.lost, 0, 'nothing is counted that did not fail');
   console.error = quiet;
 }
@@ -2069,6 +2073,34 @@ async function joinSnapshot(a) {
   is((await count()).on, 0, 'and the field the menu actually reads is untouched');
   is(a.lost, 0, 'nothing is counted as a lost row: a refusal is not a storage fault');
   is(a.timer, null, 'and none of it started the arena ticking, which is what would cost money');
+}
+
+// ---- the arena says how long it has been awake, which is the only way to tell stale code from fresh ----
+// A deploy is current the moment wrangler says so; the ARENA is not. A warm Durable Object keeps running
+// the code it was built with until it is recycled - measured 2026-10-22, five minutes of the live arena
+// playing by the old rules while every date said the deploy had landed. The launch checklist's "the
+// deployed arena is the server in this folder" compared two timestamps, so it read green through that
+// whole window: honest about the deployment, silent about the referee, which is the gap it exists to
+// close. Seconds awake is what closes it - an instance that woke BEFORE a deploy cannot be running it -
+// and it rides on the one path that costs nothing, the way the fault traces beside it do.
+{
+  const a = arena();
+  const count = async () => JSON.parse(await (await a.fetch(new Request('https://arena.test/count'))).text());
+
+  is(typeof (await count()).up, 'number', 'the count says in seconds how long the arena has been awake');
+  is((await count()).up, 0, 'an arena built a moment ago has been awake no time at all');
+  a.woke -= 7 * 60 * 1000;
+  is((await count()).up, 420, 'and it counts whole seconds, so seven minutes reads as 420');
+
+  // THE TRAP, and the only way this can rot: reset() runs when the last rider leaves and rebuilds the
+  // ride from nothing - but the instance, and the code it is running, are exactly as old as they were.
+  // Clear it there and a Worker deployed while the arena sat empty would read as fresh the instant
+  // somebody pressed Start, which is precisely the false green this was written to remove.
+  a.reset();
+  is((await count()).up, 420, 'an arena that emptied and reset is still as old as the code it is running');
+
+  is((await count()).on, 0, 'the field the menu actually reads is untouched');
+  is(a.timer, null, 'and asking never started the tick, which is what would cost money');
 }
 
 console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');

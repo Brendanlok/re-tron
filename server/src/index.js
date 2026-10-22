@@ -80,6 +80,15 @@ export class Arena {
     // beside this.lost and carried the same cheap way, for the same reason: it is the only way anyone
     // outside this object ever finds out.
     this.turned = 0;
+    // When THIS instance started, which is a different question from when the Worker was last deployed
+    // and the only one that says what the referee is actually playing by. A warm Durable Object goes on
+    // running the code it was built with until it is recycled: measured 2026-10-22, a deploy was current
+    // the moment wrangler said so and the arena answered by the OLD rules for five more minutes, six
+    // probes - stale, stale, stale, stale, stale, correct. An instance that woke BEFORE a deploy landed
+    // cannot be running it, so this is carried on /count and the launch checklist compares the two. Set
+    // here and never in reset(), for the same reason this.lost is: the ride is rebuilt when the last
+    // rider leaves, the instance and its code are exactly as old as they were.
+    this.woke = Date.now();
     this.reset();
   }
   reset() {
@@ -103,6 +112,9 @@ export class Arena {
       // built field by field rather than as one ternary, so a second trace does not double the shapes
       // this answers in: absent is the normal answer for both, and the menu reads nothing but `on`.
       const r = {on};
+      // always, unlike the two traces below: it is not a fault report, it is the one fact nothing
+      // outside this object can find out any other way (see this.woke). The menu reads only `on`.
+      r.up = Math.round((Date.now() - this.woke) / 1000);
       if (this.lost) r.lost = this.lost;
       if (this.turned) r.turned = this.turned;
       return Response.json(r, {headers: {'access-control-allow-origin': '*'}});

@@ -276,6 +276,16 @@ except Exception as e:
 # stale Worker serves a page that looks perfect and plays by last week's rules, and nothing on the
 # screen says so. Compared by date, not by contents - wrangler knows when it last deployed, git
 # knows when the server last changed - which catches the whole class without needing a build.
+# AND BY THE ARENA'S OWN ANSWER, added 2026-10-23, because the dates alone left this check green
+# through the exact window it exists to catch. A deploy is current the moment wrangler says so; the
+# ARENA is not. The Durable Object that is the one shared arena keeps running the code it was built
+# with until it is recycled - measured 2026-10-22 by deploying and then failing to see it live five
+# times in a row, six probes over six minutes: stale, stale, stale, stale, stale, correct. So for
+# about five minutes this line was honest about the deployment and silent about the referee, which
+# is half of nothing on a launch morning. The referee now says how many seconds it has been awake
+# (/count, carried the same cheap way as the fault traces), and an instance that woke BEFORE the
+# deploy landed cannot be running it. Nothing to remember to bump: it is a clock, not a version
+# string. The five-minute window is now visible instead of invisible, and the answer is wait.
 SERVER = ['server/src/index.js', 'server/wrangler.toml']
 
 def sh(*a, **kw):
@@ -298,12 +308,28 @@ try:
               'wrangler would not say - run it by hand in server/: npx.cmd wrangler deployments list')
     else:
         live = max(when(x) for x in stamps)
+        fresh = live > when(changed)
+        # and what the arena itself is riding on. A cold arena is started BY this request, so it comes
+        # back seconds old and reads correctly as current; a warm one hands back its real age.
+        st, b = get(ARENA + '/count')
+        up = json.loads(b).get('up') if st == 200 else None
+        woke = (datetime.datetime.now(datetime.timezone.utc)
+                - datetime.timedelta(seconds=up)) if up is not None else None
+        riding = woke is not None and woke > live
+        detail = 'deployed %s, server last changed %s' % (live.strftime('%Y-%m-%d %H:%M UTC'),
+            when(changed).astimezone(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC'))
+        if dirty: detail += ' - uncommitted: ' + ', '.join(x.strip() for x in dirty.splitlines())
+        if not fresh: detail += ' - deploy it: cd server, then npx.cmd wrangler deploy'
+        if up is None:
+            detail += ' - and the arena would not say how long it has been awake (/count gave %d)' % st
+        elif not riding:
+            detail += (' - and the ARENA woke %s, %d min BEFORE that deploy: players are still riding'
+                       ' on the old referee. Wait for it to recycle (about 5 min idle) and run this'
+                       ' again' % (woke.strftime('%H:%M UTC'), (live - woke).seconds // 60))
+        else:
+            detail += ', arena awake %d min and it woke after the deploy' % (up // 60)
         check('the deployed arena is the server in this folder',
-              not dirty and live > when(changed),
-              'deployed %s, server last changed %s' % (live.strftime('%Y-%m-%d %H:%M UTC'),
-                  when(changed).astimezone(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC'))
-              + (' - uncommitted: ' + ', '.join(x.strip() for x in dirty.splitlines()) if dirty else '')
-              + ('' if not dirty and live > when(changed) else ' - deploy it: cd server, then npx.cmd wrangler deploy'))
+              not dirty and fresh and riding, detail)
 except Exception as e:
     check('the deployed arena is the server in this folder', False, repr(e))
 
