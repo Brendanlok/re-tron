@@ -124,6 +124,31 @@ def asset_verdict(st, live, mine, sha):
                    ' give Pages a minute and run this again'
                    % (st, sha(live), len(live), sha(mine), len(mine)))
 
+# Check 6's answer, split out for the same reason, and here the split earns more than tidiness: the
+# STALE answer is the one no live run can ever show you, because producing it on purpose means
+# deploying over a warm arena. Three things have to hold - nothing uncommitted, a deployment newer
+# than the source, and an arena instance that woke AFTER that deployment. The third is the one that
+# was missing until 2026-10-23; see the long note at check 6 for the five minutes that proved it.
+def arena_verdict(dirty, changed, live, up, now):
+    fresh = live > changed
+    woke = now - datetime.timedelta(seconds=up) if up is not None else None
+    riding = woke is not None and woke > live
+    d = 'deployed %s, server last changed %s' % (live.strftime('%Y-%m-%d %H:%M UTC'),
+        changed.astimezone(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC'))
+    if dirty:
+        d += ' - uncommitted: ' + ', '.join(x.strip() for x in dirty.splitlines())
+    if not fresh:
+        d += ' - deploy it: cd server, then npx.cmd wrangler deploy'
+    if up is None:
+        d += ' - and the arena would not say how long it has been awake'
+    elif not riding:
+        d += (' - and the ARENA woke %s, %d min BEFORE that deploy: players are still riding on the'
+              ' OLD referee. It is not a bad deploy, it is a warm one - give it about 5 min idle to'
+              ' recycle and run this again' % (woke.strftime('%H:%M UTC'), (live - woke).seconds // 60))
+    else:
+        d += ', arena awake %d min and it woke after the deploy' % (up // 60)
+    return not dirty and fresh and riding, d
+
 # runs before the network checks, so proving it costs nothing: python preflight.py --self-check
 if '--self-check' in sys.argv:
     assert board_todo(JUNK, datetime.date(2026, 10, 3)) == (JUNK, False), 'junk before launch day is not fatal'
@@ -171,6 +196,18 @@ if '--self-check' in sys.argv:
     assert 'nothing served' in asset_verdict(404, b'', b'png', short)[1], 'a 404 must not read as a stale push'
     assert 'push it' in asset_verdict(200, b'OLD', b'png', short)[1], 'a stale copy must say what to do about it'
     print('ok   asset_verdict: a served file must MATCH, and a 404 reads differently from a stale push')
+    # the five minutes of 2026-10-22, written as four lines that cost nothing to run. T is now, the
+    # server was last changed two hours ago, and the deploy landed ten minutes ago.
+    T = datetime.datetime(2026, 10, 23, 12, 0, tzinfo=datetime.timezone.utc)
+    src, dep = T - datetime.timedelta(hours=2), T - datetime.timedelta(minutes=10)
+    assert arena_verdict('', src, dep, 120, T)[0], 'an arena that woke after the deploy is riding on it'
+    assert not arena_verdict('', src, dep, 3600, T)[0], 'an arena awake since BEFORE the deploy is the stale referee - the exact hole two dates could not see'
+    assert 'OLD referee' in arena_verdict('', src, dep, 3600, T)[1], 'and it says so rather than reading green'
+    assert 'give it about 5 min' in arena_verdict('', src, dep, 3600, T)[1], 'and says the answer is to wait, not to deploy again'
+    assert not arena_verdict('', src, dep, None, T)[0], 'an arena that will not say its age proves nothing'
+    assert not arena_verdict('', T, dep, 120, T)[0], 'a source newer than the deploy still fails, as it always did'
+    assert not arena_verdict(' M server/src/index.js', src, dep, 120, T)[0], 'and so do uncommitted server edits'
+    print('ok   arena_verdict: a current deployment is not a current ARENA, and the stale window says wait')
     print('ok   board_todo: finds the junk, spares a real run, and only turns fatal on launch day')
     assert verdict([]) == 'all good', 'a clean run still reads all good'
     assert verdict([BOARD]).startswith('NOT YET'), 'the board alone is a job, not a fault'
@@ -308,28 +345,14 @@ try:
               'wrangler would not say - run it by hand in server/: npx.cmd wrangler deployments list')
     else:
         live = max(when(x) for x in stamps)
-        fresh = live > when(changed)
-        # and what the arena itself is riding on. A cold arena is started BY this request, so it comes
-        # back seconds old and reads correctly as current; a warm one hands back its real age.
+        # and what the arena itself is riding on, which no date here can say. A cold arena is started
+        # BY this request, so it comes back seconds old and reads correctly as current; a warm one
+        # hands back its real age, and if that reaches past the deploy it is the old referee.
         st, b = get(ARENA + '/count')
         up = json.loads(b).get('up') if st == 200 else None
-        woke = (datetime.datetime.now(datetime.timezone.utc)
-                - datetime.timedelta(seconds=up)) if up is not None else None
-        riding = woke is not None and woke > live
-        detail = 'deployed %s, server last changed %s' % (live.strftime('%Y-%m-%d %H:%M UTC'),
-            when(changed).astimezone(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC'))
-        if dirty: detail += ' - uncommitted: ' + ', '.join(x.strip() for x in dirty.splitlines())
-        if not fresh: detail += ' - deploy it: cd server, then npx.cmd wrangler deploy'
-        if up is None:
-            detail += ' - and the arena would not say how long it has been awake (/count gave %d)' % st
-        elif not riding:
-            detail += (' - and the ARENA woke %s, %d min BEFORE that deploy: players are still riding'
-                       ' on the old referee. Wait for it to recycle (about 5 min idle) and run this'
-                       ' again' % (woke.strftime('%H:%M UTC'), (live - woke).seconds // 60))
-        else:
-            detail += ', arena awake %d min and it woke after the deploy' % (up // 60)
         check('the deployed arena is the server in this folder',
-              not dirty and fresh and riding, detail)
+              *arena_verdict(dirty, when(changed), live, up,
+                             datetime.datetime.now(datetime.timezone.utc)))
 except Exception as e:
     check('the deployed arena is the server in this folder', False, repr(e))
 
