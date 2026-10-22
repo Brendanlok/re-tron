@@ -81,6 +81,9 @@
   #overlay .tag{margin:-4px 0 8px;color:#ffd25f;font-size:15px;font-weight:700;letter-spacing:.02em;}
   #stats{margin:8px 0 2px;color:#9fadc1;font-size:14px;}
   #stats b{color:#ffd25f;font-size:20px;}
+  /* the rule behind the three numbers, in the same quiet voice as .how - the result screen is the
+     one moment a player cares what a knockout was worth, and it has the room the menu does not */
+  #stats i{display:block;margin:3px 0 0;font-size:12px;font-style:normal;color:#6b7a90;}
   #nameRow{margin:14px 0 0;}
   #nameIn{padding:10px 12px;font-size:19px;border-radius:9px;border:1.5px solid #46587a;font-family:inherit;
     width:168px;text-align:center;letter-spacing:.16em;text-transform:uppercase;font-weight:800;
@@ -553,7 +556,11 @@ function showResult(s, reason, killer) {
   // only when there was something to record.
   const counted = reason === 'lost' && Math.floor((tick - myStart) / 10) + 10 * myKos > 0;
   $('stats').hidden = !s && !counted;
-  if (s) { $('stats').innerHTML = 'Score <b>' + s.score + '</b> &middot; Alive <b>' + s.secs.toFixed(1) + 's</b> &middot; <b>' + s.kos + '</b> KO' + (s.kos === 1 ? '' : 's'); }
+  // The three numbers were shown and the rule joining them never was, anywhere on the page: a rider
+  // could read Score 29 off a 19.6s run with one knockout and not know the knockout was worth ten
+  // seconds of riding. That is the blade's whole risk and reward, so say it where the numbers are.
+  if (s) { $('stats').innerHTML = 'Score <b>' + s.score + '</b> &middot; Alive <b>' + s.secs.toFixed(1) + 's</b> &middot; <b>' + s.kos + '</b> KO' + (s.kos === 1 ? '' : 's')
+    + '<i>a point a second, ten for every knockout</i>'; }
   else if (counted) { $('stats').textContent = 'That run still counted — look for your name on the board.'; }
   $('startLbl').textContent = 'Start again';
   if (reason !== 'lost') hangUp();
