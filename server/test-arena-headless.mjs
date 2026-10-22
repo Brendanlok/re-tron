@@ -4,6 +4,8 @@
 // the whole balance of the game gets checked on every run. Everything is read out of the broadcast
 // the riders actually receive, so this checks what players are told, not just the server's own state.
 import {Arena} from './src/index.js';
+// the ten the referee hands out, named here because the module does not export them
+const BOT_NAMES = ['VOLT', 'NEON', 'ARC', 'FLUX', 'ION', 'GRID', 'PULSE', 'ZAP', 'RAY', 'HEX'];
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 
@@ -1114,10 +1116,74 @@ function ride(a, name, y0, kos = 0) {
     'and no bot ever rides under the name that rider is using while they are in the arena');
 }
 
+// The block above spawns the rider FIRST, which is the only order the dedupe ever covered: the check
+// lives in botName() and runs when a BOT arrives, so it looks at who is already out there and never at
+// who turns up later. A rider arriving second was not checked against the bots at all - and the ten bot
+// names are the words a player in a Tron game reaches for, NEON and GRID and ION and ARC. Measured on
+// this referee 2026-10-22: a player typing the name of a bot already riding shared it with that live bot
+// in 50 of 60 runs, and in 3 of them the corner's rider list showed the one name on two rows at once -
+// the exact thing the dedupe exists to stop, reached from the other direction. The bot gives way now:
+// it typed nothing, the rider typed theirs.
+{
+  const a = arena({bots: true});
+  for (let i = 0; i < 40; i++) a.step();               // let the bots fill the arena to TARGET
+  const bots = [...a.bikes.values()].filter(b => b.bot);
+  assert(bots.length >= 2, 'the arena is full of bots before anyone joins (' + bots.length + ')');
+  const wanted = bots[2 % bots.length].name;           // not the oldest: that one steps aside anyway
+  const mine = a.spawn(wanted, false);
+  assert(mine && mine.name === wanted, 'the rider keeps the bot name they typed (' + wanted + ')');
+  is([...a.bikes.values()].filter(b => b.name === wanted).length, 1,
+    'and no bot is left riding under it the moment they are seated');
+  const renamed = a.out.n.filter(([, n]) => n !== wanted);
+  assert(renamed.length >= 1, 'the bot that gave way is announced under its new name, so the list repaints');
+  assert(renamed.every(([, n]) => BOT_NAMES.includes(n)), 'and the name it took is still a bot name');
+  for (let i = 0; i < 300 && mine.alive; i++) {
+    a.step();
+    const names = [...a.bikes.values()].map(b => b.name);
+    if (new Set(names).size !== names.length) break;
+  }
+  const names = [...a.bikes.values()].map(b => b.name);
+  is(new Set(names).size, names.length, 'and no two bikes share a name for the rest of the run');
+}
+
+// Every seat in a full arena, not just the one trial above: whichever bot a late rider names, the arena
+// comes back with that name used once. The old referee failed this on five of the six.
+{
+  let shared = 0;
+  for (let seat = 0; seat < 6; seat++) {
+    const a = arena({bots: true});
+    for (let i = 0; i < 40; i++) a.step();
+    const bots = [...a.bikes.values()].filter(b => b.bot).map(b => b.name);
+    const wanted = bots[seat % bots.length];
+    a.spawn(wanted, false);
+    for (let i = 0; i < 3; i++) a.step();
+    if ([...a.bikes.values()].filter(b => b.name === wanted).length > 1) shared++;
+  }
+  is(shared, 0, 'naming any one of the six bots leaves that name on exactly one bike');
+}
+
+// A rider who types a bot name also writes that name to the board, and the board is the one place a
+// player cannot tell a bot from a person - a bot's own run is never recorded. So VOLT at the top of all
+// time used to read as the computer having beaten everyone. Only the rider's run is ever written, and
+// with the rename above no bot is wearing the name while they ride under it.
+{
+  const a = arena({bots: true, board: true});
+  for (let i = 0; i < 40; i++) a.step();
+  const wanted = [...a.bikes.values()].filter(b => b.bot)[2].name;
+  const mine = a.spawn(wanted, false);
+  Object.assign(mine, {kos: 3, start: a.tick - 50});
+  a.kill(mine, 0, 'edge');
+  is(a.runs.length, 1, 'the rider who typed a bot name has their run recorded');
+  is(a.top(null).filter(([n]) => n === wanted).length, 1, 'under that name, once, on the board');
+  for (const b of [...a.bikes.values()].filter(x => x.bot)) { b.kos = 9; b.start = a.tick - 100; a.kill(b, 0, 'edge'); }
+  is(a.runs.length, 1, 'and no bot run is ever written down beside it');
+}
+
 // The bot dedupe above closes the common way two rows read the same, but not the last one: a rider who
 // types a name a bot is ALREADY riding under keeps it, and so does the bot, which was named first. The
-// live rider list carries no bike id - it is [name, score, botflag] - so the page cannot match on id.
-// It can match on the flag, and a player is never a bot. Lifted out of index.html rather than restated.
+// rows a page served from CACHE still meets in the minute after a deploy carry no bike id - just
+// [name, score, botflag] - so that page cannot match on id. It can match on the flag, and a player is
+// never a bot. The condition is lifted out of index.html rather than restated.
 {
   const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const pb = page.indexOf('function paintBoard');   // the LIVE rider list, not the menu board below it

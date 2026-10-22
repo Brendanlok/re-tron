@@ -238,22 +238,35 @@ export class Arena {
       const [x, y, dir] = bestAt;
       const b = {id: this.nextId++, x, y, dir, queue: [], alive: true, bot, name: name || '', charge: FULL, gap: 0,
         blade: false, want: false, kos: 0, start: this.tick, bladeFor: 0};
-      // Bot names used to go by id % 10, and ids climb for ever - so the list came round again while the
-      // earlier bot of that name was still riding. Measured 2026-10-08 over 6000 ticks: two live bots
-      // shared a name on 736 of them in one run and 1092 in another, so better than one tick in ten
-      // either way, first about two minutes in - and the HUD's rider list is drawn by name, so a player
-      // saw the same name twice on two adjacent rows. Take one nobody in the arena is using, humans
-      // included, so a bot never shadows a rider's own name either. 10 names against TARGET 6, so one is
-      // always free; the old rule stays as the fallback rather than risk a nameless bike.
-      if (bot) { const taken = new Set([...this.bikes.values()].map(o => o.name));
-        b.name = BOT_NAMES.find(n => !taken.has(n)) || BOT_NAMES[b.id % BOT_NAMES.length]; }
+      if (bot) b.name = this.botName(b);   // one nobody in the arena is using
       else if (!b.name) b.name = this.riderName(b.id);   // before the announcement below, or everyone is told a blank
       this.bikes.set(b.id, b);
       this.out.n.push([b.id, b.name, bot ? 1 : 0]);
+      // botName() runs when the BOT arrives, so it only ever looked at who was already out there.
+      // A rider arriving LATER was never checked against the bots, and the ten bot names are the words a
+      // player in a Tron game actually reaches for - NEON, GRID, ION, ARC. Measured 2026-10-22 on this
+      // referee: a player typing a bot's name shared it with that live bot in 50 of 60 runs, and in 3 of
+      // them the corner's rider list showed the one name on two rows at once, which is exactly the thing
+      // the 8 Oct fix in botName() was written to stop. The bot gives way rather than the rider: it typed
+      // nothing. Renamed after the set() above, so the rider's own name counts as taken.
+      if (!bot) for (const o of this.bikes.values())
+        if (o.bot && o !== b && o.name === b.name) { o.name = this.botName(o); this.out.n.push([o.id, o.name, 1]); }
       return b;
     }
     return null;
   }
+  // Bot names used to go by id % 10, and ids climb for ever - so the list came round again while the
+  // earlier bot of that name was still riding. Measured 2026-10-08 over 6000 ticks: two live bots
+  // shared a name on 736 of them in one run and 1092 in another, so better than one tick in ten
+  // either way, first about two minutes in - and the HUD's rider list is drawn by name, so a player
+  // saw the same name twice on two adjacent rows. Take one nobody in the arena is using, humans
+  // included, so a bot never shadows a rider's own name either. 10 names against TARGET 6, so one is
+  // always free; the old rule stays as the fallback rather than risk a nameless bike.
+  botName(b) {
+    const taken = new Set([...this.bikes.values()].map(o => o.name));
+    return BOT_NAMES.find(n => !taken.has(n)) || BOT_NAMES[b.id % BOT_NAMES.length];
+  }
+
   // open cells straight ahead, up to 30 - three seconds of riding, the most the spawn scorer rewards
   room(x, y, d) {
     let n = 0;
