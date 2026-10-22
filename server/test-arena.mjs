@@ -7,13 +7,25 @@ const URL_ = ARGS.find(a => !a.startsWith('--')) || 'ws://localhost:8787/ws';
 // junk rows sitting on the live board right now are LOK and TWO, from exactly this. The README already
 // said not to and that did not hold, so the test refuses instead of asking nicely. The regression
 // pass is the dangerous one: run it against a local arena, where it proves the same rules for free.
+// Where to go instead, which is the same answer whether you pointed this at the live arena or at a
+// local one that is not running. It stopped being 'start wrangler dev' on 22 Oct 2026 and that is not
+// a thing a reader can guess, so it is printed rather than left in a comment.
+function elsewhere() {
+  console.log('A local arena would be the place for this - npx wrangler dev in server/ - but that does');
+  console.log('NOT start on the Windows machine this repo lives on, as of 22 Oct 2026: wrangler prints one');
+  console.log('"spawn UNKNOWN" and then says Starting local server... for ever while no port ever opens.');
+  console.log('The cause is Application Control refusing to execute the workerd.exe miniflare spawns, so');
+  console.log('nothing in this folder can fix it. Do not go hunting for a local arena - these two need');
+  console.log('none, and between them they cover what this file proves:');
+  console.log('  node server/test-arena-headless.mjs   every arena rule, deterministic, no network');
+  console.log('  node server/live-pulse.mjs            a real socket takes a real seat on the live arena');
+}
 const LOCAL = /^wss?:\/\/(localhost|127\.0\.0\.1|\[::1\])([:/]|$)/.test(URL_);
 if (!LOCAL && !FORCE) {
   console.log('refusing to run against ' + URL_);
   console.log('That is not a local arena, and this test WRITES: it would leave LOK and TWO rows on the');
   console.log('all-time board, and an ARENATST note in the player inbox, that only the ADMIN secret can remove.');
-  console.log('Start a local arena instead - npx wrangler dev in server/ - then:');
-  console.log('  node server/test-arena.mjs ws://localhost:8787/ws');
+  elsewhere();
   console.log('If you really do mean to write to the live board, pass --live.');
   process.exit(1);
 }
@@ -22,6 +34,18 @@ const COUNT_ = URL_.replace(/^ws/, 'http').replace(/\/ws$/, '/count');
 const count = async () => (await fetch(COUNT_)).json();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const assert = (c, m) => { if (!c) { console.log('FAIL', m); process.exitCode = 1; } else console.log('ok  ', m); };
+
+// A local arena that is not running used to be the worst way to learn any of this: the WebSocket just
+// never opens, nothing here has a timeout, and twenty seconds later node prints its own 'unsettled
+// top-level await' warning naming a line of this file - no mention of a port, a server, or what to do.
+// One cheap GET says it properly before a socket is ever opened. /count is the right thing to ask: it
+// is the one path that answers without waking the tick, so this costs a dead arena nothing.
+try { await fetch(COUNT_, {signal: AbortSignal.timeout(2000)}); }
+catch (e) {
+  console.log('no arena is answering at ' + COUNT_ + ' (' + (e.name === 'TimeoutError' ? 'timed out' : e.message) + ')');
+  elsewhere();
+  process.exit(1);
+}
 
 function client(name) {
   const ws = new WebSocket(URL_), c = {ws, ticks: [], you: null, hi: null, events: [], names: new Map()};
