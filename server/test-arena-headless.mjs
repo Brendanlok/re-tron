@@ -405,6 +405,40 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   is(a.timer, null, 'and none of it started the arena ticking, which is what would cost money');
 }
 
+// ---- the game's own crash reports cannot drown out a player typing into the box ----
+// The thirty above are shared by everyone AND by both kinds, and the two kinds are not equals: a player
+// sends one note deliberately, while the page's error reporter sends up to nine on its own with nobody
+// asking. So four browsers the game throws on spend the whole minute between them, and everything after
+// that is refused - including the player with something to say, who is shown "could not send, try again
+// in a moment" and almost never does. Twenty of the thirty is the most the automatic half may take.
+{
+  const a = arena();
+  const post = (kind, body) => a.say(new Request('http://x/say', {method: 'POST',
+    body: JSON.stringify({kind, body}), headers: {'content-type': 'text/plain'}}));
+  // the storm that used to silence everybody: four broken browsers' worth of automatic reports, which is
+  // more than the single thirty could hold, arriving before the player has typed a word
+  let through = 0;
+  for (let i = 0; i < 36; i++) if ((await post('err', 'boom ' + i)).status === 200) through++;
+  is(through, 20, 'the reports the page files by itself are held to twenty in a minute');
+  is(a.runs.filter(r => r[0] === 'err').length, 20, 'so only twenty of them are written down');
+  is((await post('err', 'and another')).status, 429, 'and every one after that is turned away');
+  is((await post('say', 'the blade button does nothing on my phone')).status, 200,
+    'while the player who meant to write still gets through, which is the whole point');
+  is(a.runs.filter(r => r[0] === 'say').length, 1, 'and their note is on the list to be read');
+  a.said.at -= 61000;
+  is((await post('err', 'next minute')).status, 200, 'a new minute starts every tally over');
+  // a player's own allowance is unchanged from the single pot it came out of: thirty in the minute
+  a.said = {n: 0, say: 0, err: 0, at: Date.now()};
+  let mine = 0;
+  for (let i = 0; i < 31; i++) if ((await post('say', 'note ' + i)).status === 200) mine++;
+  is(mine, 30, 'a player still has thirty of their own in a minute, exactly as before');
+  // and the ceiling is what answers a real flood, which says 'say' like anything else would
+  a.said = {n: 60, say: 0, err: 0, at: Date.now()};
+  is((await post('say', 'past the ceiling')).status, 429,
+    'a flood is stopped at the ceiling before its body is ever read');
+  is(a.timer, null, 'none of which started the arena ticking either');
+}
+
 // ---- a socket left with no bike gets hung up on, so nobody can hold the tick open for free ----
 // This is the cost guard: a phone that drops off the network never sends a close, and without this
 // the arena would tick ten times a second for it until Cloudflare noticed.

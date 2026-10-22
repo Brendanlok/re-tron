@@ -65,7 +65,9 @@ export class Arena {
     // Anything that fails silently is a launch blocker, so both ways of hearing about it land in one table:
     // kind 'say' is a player typing it, kind 'err' is the page reporting its own crash.
     this.sql.exec('CREATE TABLE IF NOT EXISTS notes (kind TEXT, name TEXT, body TEXT, ua TEXT, at INTEGER)');
-    this.said = {n: 0, at: 0};
+    // n is every attempt this minute, read before a stranger's body is; say and err are what each
+    // kind has actually spent of its own allowance - see say()
+    this.said = {n: 0, say: 0, err: 0, at: 0};
     // Storage faults inside the tick are invisible from outside otherwise - see kill(). Counted
     // here rather than in reset(), so the trace outlives the arena it happened in.
     this.lost = 0;
@@ -371,8 +373,12 @@ export class Arena {
   // is a single instance, unlike a Worker isolate. A wake resets the count; storage is cheap, wiping is Lok's.
   async say(req) {
     const now = Date.now(), cors = {'access-control-allow-origin': '*'};
-    if (now - this.said.at > 60000) this.said = {n: 0, at: now};
-    if (++this.said.n > 30) return new Response('slow down', {status: 429, headers: cors});
+    if (now - this.said.at > 60000) this.said = {n: 0, say: 0, err: 0, at: now};
+    // The ceiling on how many bodies a stranger can make this object READ in a minute, which is the
+    // only thing that can be judged before the body is read: req.text() has no size of its own, and the
+    // kind the allowances below are spent from is inside it. Set above the fifty the two of them can
+    // spend together, so it binds on a flood and never on real traffic.
+    if (++this.said.n > 60) return new Response('slow down', {status: 429, headers: cors});
     let m; try { m = JSON.parse(await req.text()); } catch (e) { return new Response('bad', {status: 400, headers: cors}); }
     // The same four bytes that threw a rider off their bike this morning, on the other half of the
     // surface: 'null' IS valid JSON, so it sails past the catch above and `m.body` on the next line is
@@ -388,8 +394,25 @@ export class Arena {
     const cut = (v, n) => String(v === undefined || v === null ? '' : v).slice(0, n);
     const body = cut(m.body, 600).trim();
     if (!body) return new Response('empty', {status: 400, headers: cors});
+    const kind = m.kind === 'err' ? 'err' : 'say';
+    // ONE ALLOWANCE SHARED BY BOTH KINDS WAS THE WRONG SHAPE, and the two kinds are not equals. A player
+    // typing into the box sends one note, deliberately, because something is wrong. The page's own error
+    // reporter sends up to nine on its own with nobody asking, and one broken frame fires it every tick -
+    // so a single browser the game throws on spent nine of the thirty by itself, and four such visitors
+    // in a minute spent them all. Everything after that was refused, the player typing "the blade button
+    // does nothing on my phone" included, and the page shows that refusal as "could not send, try again
+    // in a moment", which almost nobody does. On the one day the link gets a crowd, the only channel there
+    // is for hearing from players could have been drowned out by the game's own crash reports, and nothing
+    // anywhere would have said so: a 429 is not a storage fault, so it is not in this.lost and the count
+    // says nothing about it. An allowance each is the fix. A refused report cannot take a player's slot,
+    // because it is not spending from the same pot any more.
+    // ponytail: a slice each, not per-writer limiting - there is no identity here to limit by, and the
+    // kind is the client's word anyway. Someone malicious just says 'say'; the ceiling above is what
+    // answers for them. This is about the honest page not shouting over its own players.
+    if (++this.said[kind] > (kind === 'err' ? 20 : 30))
+      return new Response('slow down', {status: 429, headers: cors});
     this.sql.exec('INSERT INTO notes VALUES (?, ?, ?, ?, ?)',
-      m.kind === 'err' ? 'err' : 'say', cut(m.name, 8), body, cut(req.headers.get('user-agent'), 160), now);
+      kind, cut(m.name, 8), body, cut(req.headers.get('user-agent'), 160), now);
     return new Response('ok', {headers: cors});
   }
 
