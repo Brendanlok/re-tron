@@ -43,6 +43,16 @@ def board_todo(rows, today):
     # Matched on all four fields, not on the name: LOK is a name a real player may well ride under.
     return [r for r in rows if list(r) in JUNK], today >= LAUNCH
 
+# EVERY row on the board, not only the four this file recognises. The green path was already fixed for
+# this hole on 4 Oct - it stopped vouching for a board it cannot judge and prints what is up instead -
+# but the FAIL and TODO paths were left listing board_todo's matches alone, and those are the two paths
+# that actually get read: a wipe is only ever pasted off a dirty board. Measured today (2026-10-22) on
+# live - the board holds five runs and the FAIL line named four, with AAA (a real one-second ride,
+# logged 21 Oct as most likely Lok's own phone) nowhere in the output. A wipe takes every row it is not
+# told to spare, so the list printed above the wipe command must be the list that command will delete.
+def board_line(rows):
+    return ', '.join('%s %d%s' % (r[0], r[1], '' if list(r) in JUNK else ' (NOT a test run)') for r in rows)
+
 # The page names its own arena, and nothing on this list ever asked it. Every other check talks to
 # ARENA directly, so a page aimed somewhere else passes all of them and still loads perfectly for the
 # player, who gets "could not reach the arena" under the button and no reason why. That line has been
@@ -120,6 +130,9 @@ if '--self-check' in sys.argv:
     assert board_todo(JUNK, LAUNCH) == (JUNK, True), 'junk ON launch day is fatal'
     assert board_todo([['REAL', 40, 30.0, 1]], LAUNCH) == ([], True), 'a real run is not junk'
     assert board_todo([], LAUNCH) == ([], True), 'a clean board is clean'
+    assert board_line(JUNK) == 'SDF 29, TEST 21, LOK 7, TWO 1', 'the four test runs read as they always did'
+    assert board_line(JUNK + [['AAA', 1, 1, 0]]).endswith('AAA 1 (NOT a test run)'), 'a real run on a dirty board is named'
+    assert board_line([]) == '', 'a clean board has nothing to list'
     # Both halves of the reports check, including the one --no-note gives up. The negative cases are
     # the point: either answer alone going green over a broken channel is the fault this check exists
     # for, and a --no-note run that reads as proof of the INSERT would be worse than not running.
@@ -363,9 +376,10 @@ except Exception as e:
 # the menu already asks, so this adds one read and wakes nothing. See board_todo at the top.
 try:
     st, b = get(ARENA + '/top')
-    left, fatal = board_todo(json.loads(b)['all'], datetime.date.today())
+    up = json.loads(b)['all']
+    left, fatal = board_todo(up, datetime.date.today())
     name = BOARD
-    shown = ', '.join('%s %d' % (r[0], r[1]) for r in left)
+    shown = board_line(up)
     # the key rides in the query string, which is the one thing the old wording left out, and the
     # reply lists whatever is left - so an empty list is the confirmation and there is no second
     # command to get wrong at nine on launch morning. One wipe covers both tabs: Today and All
@@ -388,8 +402,13 @@ try:
             '\n     irm -Method POST "%s/inbox?name=PREFLIGH&key=YOURADMINKEY"'
             '\n     then read what is left, newest first - this is players only:'
             '\n     irm "%s/inbox?key=YOURADMINKEY"' % (ARENA, ARENA, ARENA))
+    if any(list(r) not in JUNK for r in up):
+        # a wipe is one command and takes the lot, so the row it would take with it gets its own line
+        # rather than only a mark in the list - and the way to keep it is the same /board the wipe uses
+        wipe += ('\n     a row above is marked NOT a test run. The wipe takes that one too - to keep it,'
+                 '\n     drop the test names one at a time instead of wiping:'
+                 '\n     irm -Method POST "%s/board?name=SDF&key=YOURADMINKEY"' % ARENA)
     if not left:
-        up = json.loads(b)['all']
         # This used to say 'nothing but real runs on it', which is the one thing this check cannot
         # know: it recognises those four rows and nothing else, so any NEW test run reads as real and
         # the line goes green over a dirty board. It matters in the order the work actually happens -
