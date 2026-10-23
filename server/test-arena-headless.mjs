@@ -757,6 +757,31 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
     'so the page stops and says so instead of starting a run as RIDERn');
 }
 
+// ---- and the REFEREE cleans a typed name too, which is the half that actually guards the board ----
+// The block above pins the rule in index.html, and that rule is a courtesy: it is what the player
+// typing into the box sees. Nothing makes a client send what that box produced. The referee cleans the
+// name again on join, and THAT is the only thing standing between a crafted socket and arbitrary text
+// on a public board - so it is the half worth a check, and it was the half with none. The live smoke
+// test proved it ('name is cleaned to LOK', test-arena.mjs) and that file cannot run on this machine
+// since Windows began refusing to execute the workerd miniflare spawns on 22 Oct 2026, so the check it
+// carried was running nowhere. Its own header claims these two files cover what it proves; this is one
+// of the two checks that claim was missing.
+{
+  const a = arena();
+  const ride = raw => {
+    const s = {ws: {send() {}}, bike: null, count: 0, windowAt: Date.now(), idle: 0};
+    a.socks.add(s);
+    a.onMsg(s, JSON.stringify({t: 'join', name: raw}));
+    a.step();
+    return s.bike && s.bike.name;
+  };
+  is(ride('lok!!'), 'LOK', 'the referee folds case and drops punctuation, whatever the page did');
+  is(ride('mixed Case 99'), 'MIXEDCAS', 'and it cuts to eight AFTER stripping, so the cut is not spent on spaces');
+  // the page refuses this one and says so; a socket that skips the page gets the arena's own fallback
+  // rather than a blank row, which is the same path a rider who left the box empty takes
+  assert(/^RIDER[0-9A-Z]{3}$/.test(ride('小明') || ''), 'a name with nothing the board can keep still rides under a real one');
+}
+
 // ---- a rider is told WHERE they were dropped, not just that they are riding ----
 // The page hides the menu the instant 'you' lands. With only an id in it, the page had no bike to point
 // the camera at until the next tick, so every run opened on the whole arena at menu zoom and then snapped.
