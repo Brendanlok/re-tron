@@ -343,7 +343,19 @@ function liveCount() {
 // read it. Ask again over the same cheap /count, which never starts the tick. Skipped while riding (the
 // arena reports 'on' over the socket) and while the tab is in the background, so a forgotten tab costs
 // nothing; and asked straight away on coming back to the tab, which is when the number is most stale.
-const menuUp = () => !$('overlay').hidden && document.visibilityState === 'visible';
+// AND NOT FOR EVER IN A TAB NOBODY IS IN FRONT OF, which the background check above does not cover: a
+// phone put down on a desk, a window left open behind another one. Visible is visible, so a tab like
+// that went on asking both questions every 20s for as long as it stayed open - 4,320 counts a day from
+// one of them. The allowance that pays for it is 100,000 requests a day for the Worker and another
+// 100,000 for the arena object, and a count spends one of each, so two dozen forgotten tabs is the
+// whole day's worth and the arena then has nothing left to answer a real player with. Nothing here
+// wakes the tick, so this never cost duration and would never have shown up as a bill - it would have
+// shown up as the game being down on the one day it has a crowd. Stop after ten minutes with nobody
+// touching anything, and ask again the moment somebody does, which is when the number is stalest anyway.
+const MENU_IDLE = 600000;
+let lastSeen = performance.now();
+const menuUp = () => !$('overlay').hidden && document.visibilityState === 'visible'
+  && performance.now() - lastSeen < MENU_IDLE;
 // a board that failed to load is retried on the same beat — /top never starts the tick, so this is
 // as cheap as the count, and it is asked only while the menu is actually on screen
 const menuPoll = () => {
@@ -353,7 +365,16 @@ const menuPoll = () => {
   if (!lbData || lbStale) loadTop();
 };
 setInterval(() => { if (menuUp()) menuPoll(); }, 20000);
-document.addEventListener('visibilitychange', () => { if (menuUp()) menuPoll(); });
+// A tap or a key is what says somebody is actually there. It asks again only if the polling had gone
+// to sleep, so steering a bike does not fire a count on every press, and it is bound with capture like
+// the audio unlock below so it runs before whatever the gesture was aimed at.
+const touched = () => {
+  const slept = performance.now() - lastSeen > MENU_IDLE;
+  lastSeen = performance.now();
+  if (slept && menuUp()) menuPoll();
+};
+addEventListener('pointerdown', touched, true); addEventListener('keydown', touched, true);
+document.addEventListener('visibilitychange', () => { lastSeen = performance.now(); if (menuUp()) menuPoll(); });
 
 // ---- the board ---------------------------------------------------------------------------
 // The server is the only thing that writes a score, on the tick it knocks you out, so there is
