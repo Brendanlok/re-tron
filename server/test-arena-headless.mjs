@@ -33,6 +33,22 @@ console.log('seed  ' + SEED + '   (SEED=' + SEED + ' node server/test-arena-head
 // one line everybody reads already is.
 const fails = [];
 const assert = (c, m) => { if (c) console.log('ok   ', m); else { console.log('FAIL ', m); fails.push(m); } };
+
+// And a check that THROWS rather than failing takes that list down with it: the suite stops where it
+// stood, nothing prints the summary at the foot of this file, and the last three lines are a node stack
+// ending in the version number. Measured 2026-10-23 while moving the referee's write bar on purpose -
+// an early check read runs[0][2] off a row that was never written, the run died there, and the 1,900
+// lines of checks after it went unrun while tail -3 said only 'Node.js v26.3.0'. Say it in the same
+// place and the same shape as a red, because tail is how this file is actually read.
+const stopped = e => {
+  if (fails.length) console.log('\n' + fails.length + ' had already FAILED:\n' + fails.map(m => '  ' + m).join('\n'));
+  console.log('\nSTOPPED - a check threw rather than failing, so every check after it went unrun:  SEED='
+    + SEED + ' node server/test-arena-headless.mjs\n  '
+    + (e && e.stack ? e.stack.split('\n').slice(0, 2).map(l => l.trim()).join('\n  ') : e));
+  process.exit(1);
+};
+process.on('uncaughtException', stopped);
+process.on('unhandledRejection', stopped);
 const is = (got, want, m) => assert(got === want, m + ' (' + got + (got === want ? '' : ', wanted ' + want) + ')');
 
 // The Durable Object hands the Arena a SQLite handle. Most checks only need to know that a run was
@@ -1889,6 +1905,42 @@ function ride(a, name, y0, kos = 0) {
   await beats(flat, 180);
   is(flat.asks, 0, 'the gate this replaced never noticed the day turn over');
   is(flat.lbData.today.length, 1, 'and left yesterday sitting under a tab reading Today');
+}
+
+// ---- the one score on the result screen the page works out for itself ----
+// Every score in this game is the referee's: the client never sends one, and the result screen reads its
+// three numbers straight off the knockout the referee broadcast. The dropped-connection path is the one
+// exception, because there is no knockout to read - the socket is gone - so the page decides on its own
+// whether to tell the rider "That run still counted - look for your name on the board". That decision
+// re-derives the referee's rule inside index.html: a point a second plus ten a knockout, and a row only
+// if that comes to more than nothing. Two copies of one rule in two files, and the half that matters is
+// the bar in kill() - nothing held them together, so moving it would leave the page sending riders to
+// look for a row that was never written, on the single path that fires when the network fails, which on
+// a launch link is a phone on bad signal. Lifted out of the page and asked the same question as the
+// referee at the boundary, which is the only place the two can disagree.
+{
+  const pg = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const expr = pg.match(/const counted = reason === 'lost' && ([^;]+);/);
+  assert(!!expr, 'the result screen works out for itself whether a lost run was recorded');
+  const says = expr ? new Function('tick', 'myStart', 'myKos', 'return ' + expr[1]) : () => false;
+  // the referee's half: a run of a known length and knockout count, ended the way a dropped socket ends one
+  const wrote = (ticks, kos) => {
+    const a = arena();
+    const {b} = rider(a, 'LOK', 20, 30, 'R');
+    b.start = a.tick - ticks; b.kos = kos;
+    a.kill(b, 0, 'left');
+    return a.runs.length === 1;
+  };
+  const agree = (ticks, kos, m) => is(!!says(ticks, 0, kos), wrote(ticks, kos), m);
+  agree(9, 0, 'a run under a second with nothing on it is promised nothing, because nothing was written');
+  agree(10, 0, 'one whole second is the shortest run the board keeps, and the screen says it counted');
+  agree(5, 1, 'half a second with a knockout counts, because a knockout is worth ten seconds of riding');
+  agree(1, 0, 'and a run of a single tick is still told the truth about itself');
+
+  // red if either copy moves: the same comparison against a page left on a bar the referee no longer has
+  const drifted = new Function('tick', 'myStart', 'myKos', 'return Math.floor((tick - myStart) / 10) > 0');
+  is(!!drifted(5, 0, 1), false, 'a page that lost the knockout half would deny a run the referee kept');
+  is(wrote(5, 1), true, 'and that run really is on the board, so this comparison does catch a drift');
 }
 
 // ---- a storage fault costs the row it was writing and nothing else ----
