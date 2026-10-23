@@ -547,8 +547,16 @@ function showResult(s, reason, killer) {
   // and has always wrapped and fitted. Step the headline down when its longest word is too long to fit,
   // rather than shrinking every title to suit the worst one — the menu's RE-TRON keeps its full size.
   $('title').classList.toggle('long', /[A-Z0-9]{10,}/.test($('title').textContent));
-  $('msg').textContent = reason === 'lost' ? 'The arena dropped out. Start to jump back in.'
-    : 'The arena keeps going without you. Jump back in.';
+  // A rider who left the name box blank is sent to a board to look for a name nobody has ever told
+  // them, and the referee hands out a FRESH RIDERnnn on every join (riderName takes one no rider and
+  // no run on the board is using) - so their runs never gather under one row, and the page that
+  // remembers a typed name for ever says nothing to the people who never type one. On launch day the
+  // box is blank for most of them. The arena announces the name it gave on the first tick, so it is
+  // already here: say it, and say in the same breath what typing one buys.
+  const gave = !myName && (names.get(me) || {}).n;
+  $('msg').textContent = (gave ? 'You rode as ' + gave + ' — type a name to keep your runs under one. ' : '')
+    + (reason === 'lost' ? 'The arena dropped out. Start to jump back in.'
+                         : 'The arena keeps going without you. Jump back in.');
   // A dropped connection is still a real run: the arena knocks the bike out and the referee writes the
   // score down exactly as if it had crashed (measured 2026-10-01 — yanked a socket mid-ride and the run
   // landed on the board). This screen showed nothing at all, so a rider who lost signal was told only
