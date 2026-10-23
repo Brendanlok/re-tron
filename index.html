@@ -399,7 +399,10 @@ function paintLb() {
     '<span class="nm">' + n.replace(/[<&]/g, '') + '</span>' +
     '<span class="sub">' + secs.toFixed(1) + 's · ' + kos + ' KO' + (kos === 1 ? '' : 's') + '</span>' +
     '<b>' + sc + '</b></div>').join('')
-    : '<div class="none">' + (lbView === 'today' ? 'No runs yet today — the first one is yours.' : 'No runs yet.') + '</div>';
+    // The all-time board is empty exactly once - the morning of the wipe, before anyone has ridden -
+    // and that is the one morning every visitor is new. Today's tab invites them in; this one used to
+    // answer 'No runs yet.' and read like the board had failed to load rather than like an open seat.
+    : '<div class="none">' + (lbView === 'today' ? 'No runs yet today — the first one is yours.' : 'No runs on the board yet — the first one is yours.') + '</div>';
 }
 $('lbToday').addEventListener('click', () => { lbView = 'today'; paintLb(); });
 $('lbAll').addEventListener('click', () => { lbView = 'all'; paintLb(); });
