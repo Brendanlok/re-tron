@@ -9,8 +9,14 @@ const BOT_NAMES = ['VOLT', 'NEON', 'ARC', 'FLUX', 'ION', 'GRID', 'PULSE', 'ZAP',
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 
-let bad = 0;
-const assert = (c, m) => { if (c) console.log('ok   ', m); else { console.log('FAIL ', m); bad++; } };
+// Held as well as printed, because of how this file is actually run. It prints about 1,600 lines, so
+// every session pipes it through tail - and a red line 900 lines up then scrolls away, leaving the last
+// line saying '1 FAILED' and nothing saying WHAT. Measured 2026-10-23: a single red in 36 runs, read
+// through tail -3, and the check that failed could not be recovered afterwards because 35 later runs
+// were green. A rare red is the one that most needs its name kept; say it again at the end, where the
+// one line everybody reads already is.
+const fails = [];
+const assert = (c, m) => { if (c) console.log('ok   ', m); else { console.log('FAIL ', m); fails.push(m); } };
 const is = (got, want, m) => assert(got === want, m + ' (' + got + (got === want ? '' : ', wanted ' + want) + ')');
 
 // The Durable Object hands the Arena a SQLite handle. Most checks only need to know that a run was
@@ -2103,5 +2109,5 @@ async function joinSnapshot(a) {
   is(a.timer, null, 'and asking never started the tick, which is what would cost money');
 }
 
-console.log(bad ? '\n' + bad + ' FAILED' : '\nall good');
-process.exit(bad ? 1 : 0);
+console.log(fails.length ? '\n' + fails.length + ' FAILED\n' + fails.map(m => '  ' + m).join('\n') : '\nall good');
+process.exit(fails.length ? 1 : 0);
