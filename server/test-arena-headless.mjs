@@ -9,6 +9,22 @@ const BOT_NAMES = ['VOLT', 'NEON', 'ARC', 'FLUX', 'ION', 'GRID', 'PULSE', 'ZAP',
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 
+// A red in here used to be unrepeatable, and that is worse than a red. Several checks lean on
+// randomness the referee owns - spawn() picks from 60 random spots, think() has a 6% itch to turn for
+// no reason, and the bot and soak sections ride hundreds of ticks on both. Measured: one red in 36 runs
+// on 2026-10-23, then 80 clean runs chasing it the next session, so the arena that went wrong is gone
+// and cannot be looked at again. Math.random is the only source of any of it, so it is replaced here by
+// a generator whose seed is PRINTED. Left alone the seed is random, so the suite still stresses a
+// different arena every run - that is the whole value of it. Handed one back it rides the identical
+// arena, so a rare red is chased instead of re-rolled:  SEED=1234 node server/test-arena-headless.mjs
+const SEED = (Number(process.env.SEED) || (Math.random() * 0x100000000)) >>> 0;
+let _s = SEED;
+Math.random = () => ((_s = (Math.imul(_s, 1103515245) + 12345) >>> 0) / 0x100000000);
+// A block that wants the SAME arena every run borrows the stream at a fixed seed and gives back where
+// it was, so pinning one section does not quietly pin every section after it as well.
+const seedAt = s => { const was = _s; _s = s >>> 0; return () => { _s = was; }; };
+console.log('seed  ' + SEED + '   (SEED=' + SEED + ' node server/test-arena-headless.mjs rides this same arena again)');
+
 // Held as well as printed, because of how this file is actually run. It prints about 1,600 lines, so
 // every session pipes it through tail - and a red line 900 lines up then scrolls away, leaving the last
 // line saying '1 FAILED' and nothing saying WHAT. Measured 2026-10-23: a single red in 36 runs, read
@@ -920,11 +936,11 @@ function ride(a, name, y0, kos = 0) {
 // bookkeeping, line for line out of index.html, and compared to the referee's cell by cell.
 // Seeded, so a failure here comes back the same way next time.
 {
-  let seed = 20261001;
-  const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
-  const pick = n => Math.floor(rnd() * n);
-  const realRandom = Math.random;
-  Math.random = rnd;   // where the arena drops riders and how the bots ride, seeded along with everything else
+  // One generator for the file, borrowed here at a fixed seed so this block rides the same ten
+  // minutes every run. The local one this replaced multiplied in doubles and lost its low bits:
+  // 200,000 draws held 16,936 distinct values, so the varied load was a short loop played over.
+  const unpin = seedAt(20261001);
+  const rnd = Math.random, pick = n => Math.floor(rnd() * n);
   const a = arena({bots: true});
   const STEP = {U: [0, -1], D: [0, 1], L: [-1, 0], R: [1, 0]}, DIRS = ['U', 'D', 'L', 'R'];
   const page = {walls: new Map(), bikes: new Map()};
@@ -997,7 +1013,7 @@ function ride(a, name, y0, kos = 0) {
     else for (const b of live) { const p = page.bikes.get(b.id); if (!p || p[1] !== b.x || p[2] !== b.y) { bikeDiff++; break; } }
   }
 
-  Math.random = realRandom;
+  unpin();
   assert(!threw, 'the arena runs ten minutes under load without throwing' + (threw ? ' (' + threw.message + ')' : ''));
   is(offBoard, 0, 'no bike is ever left off the board');
   is(shared, 0, 'and no two bikes ever share a cell');
@@ -2109,5 +2125,8 @@ async function joinSnapshot(a) {
   is(a.timer, null, 'and asking never started the tick, which is what would cost money');
 }
 
-console.log(fails.length ? '\n' + fails.length + ' FAILED\n' + fails.map(m => '  ' + m).join('\n') : '\nall good');
+console.log(fails.length
+  ? '\n' + fails.length + ' FAILED - ride this arena again:  SEED=' + SEED
+    + ' node server/test-arena-headless.mjs\n' + fails.map(m => '  ' + m).join('\n')
+  : '\nall good');
 process.exit(fails.length ? 1 : 0);

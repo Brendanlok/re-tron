@@ -16,7 +16,11 @@ Your bike leaves nothing behind until you switch on the blade. Then it lays a wa
     blocks the `workerd.exe` miniflare spawns, which you only see by running that binary
     directly. Nothing in this folder can fix it and a session must not route around it, so
     do not spend an hour on it: use the two checks below, which need no local arena.
-  - Check the arena rules: `node server/test-arena-headless.mjs` — no server, no network, deterministic.
+  - Check the arena rules: `node server/test-arena-headless.mjs` — no server, no network.
+    It rides a different arena every run, which is the point of it, and prints the seed it used on
+    the first line and again beside any red. Hand that seed back - `SEED=1234 node
+    server/test-arena-headless.mjs` - and it rides the identical arena, so a rare failure is chased
+    rather than re-rolled until it goes green.
   - Before announcing: `python preflight.py` from the repo root - the whole launch list in one
     command, run against the live arena by default. It seats a real bike and rides it, so green
     means playable and not merely reachable. `node server/live-pulse.mjs` is that check alone.
