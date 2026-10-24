@@ -2214,6 +2214,43 @@ async function joinSnapshot(a) {
   is(a.timer, null, 'and asking never started the tick, which is what would cost money');
 }
 
+// ---- the sideways notice is the only way into the game from landscape, and it is pure CSS ----
+// A phone on its side gets 40x60 of arena through a 16:9 slot, so the page covers the menu with "turn
+// your phone back" and takes the taps as well, which is what stops a run being started sideways.
+// Verified on the LIVE page today at 667x375 with real coarse-pointer emulation: the card covers the
+// whole viewport and reads correctly. What that same measurement also showed is why this matters more
+// than a notice usually would - at 375px tall the Start button sits at y 356-416, BELOW THE FOLD. So
+// the notice is not a courtesy over a working menu; it is the only thing standing between a sideways
+// visitor and a screen with no visible way in. There is no JS behind any of it, nothing throws if it
+// stops working, and the game plays perfectly in portrait throughout - the exact shape of rot this
+// file's image-size check was written for. Three things carry it and every one fails silently.
+{
+  const pg = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const rule = re => (pg.match(re) || [])[1] || '';
+  // ONE: hidden by default, shown only by the query. A desktop or a portrait phone must never see it.
+  const base = rule(/\n\s*#rot\{([^}]*)\}/);
+  assert(/display:none/.test(base), 'the sideways notice is hidden by default, so it cannot leak into portrait');
+  const q = pg.match(/@media\s*\(pointer:coarse\)\s*and\s*\(orientation:landscape\)\s*and\s*\(max-height:(\d+)px\)\s*\{\s*#rot\{display:flex/);
+  assert(q, 'and one media query is the whole of what ever shows it');
+  // coarse keeps it off a desktop browser squashed short; the height keeps it off a tablet on its
+  // side, which is as roomy as a laptop. A phone in landscape is at most about 430px tall.
+  assert(q && Number(q[1]) >= 400 && Number(q[1]) <= 500,
+    'cutting off between a phone on its side and a tablet on its side (' + (q ? q[1] : '?') + 'px)');
+  // TWO: the full-screen menu card is a SIBLING selector, so it is the markup order that arms it.
+  // Move #rot above #overlay and the selector quietly stops matching: the notice shrinks to the small
+  // riding banner, stops taking taps, and a sideways visitor is handed the menu whose Start is off
+  // the bottom of the screen. Both must be direct children of body - unindented is the proxy for that.
+  assert(pg.indexOf('\n<div id="rot"') > pg.indexOf('\n<div id="overlay">') && pg.indexOf('\n<div id="rot"') > 0,
+    'and it sits after the menu as a plain sibling, which is what arms the selector below');
+  const menu = rule(/#overlay:not\(\[hidden\]\) ~ #rot\{([^}]*)\}/);
+  assert(/inset:0/.test(menu), 'on the menu it takes the whole screen');
+  assert(/pointer-events:auto/.test(menu), 'and the taps with it, so nobody can start a run sideways');
+  // THREE: it has to be ON TOP of the menu it is covering. Raise the overlay and the notice is behind
+  // it - still "displayed", still taking no taps anyone can reach, and invisible.
+  const zRot = Number(rule(/#rot\{[^}]*z-index:(\d+)/)), zMenu = Number(rule(/#overlay\{[^}]*z-index:(\d+)/));
+  assert(zRot > zMenu, 'and it is above the menu rather than behind it (' + zRot + ' over ' + zMenu + ')');
+}
+
 console.log(fails.length
   ? '\n' + fails.length + ' FAILED - ride this arena again:  SEED=' + SEED
     + ' node server/test-arena-headless.mjs\n' + fails.map(m => '  ' + m).join('\n')
