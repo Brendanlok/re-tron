@@ -413,6 +413,43 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   } finally { Math.random = rnd; }
 }
 
+// ---- a bot does not swing the blade at a rider who has only just joined ----
+// A frozen decision - bots "give a fresh rider ~2s before hunting them" - and until now the only
+// thing holding it up was six words of comment next to the condition. Nothing checked it, and it is
+// the shape of fault that never throws: drop the grace and the arena still ticks, the suite still
+// runs green, and the only symptom is that a player's first two seconds are spent dying to a blade
+// that was out before they had turned once. On a launch link where the first thing anyone meets is
+// six bots, that is the whole first impression. The rule reads the TARGET's age, not the bot's, so
+// it is checked on a rider who has just arrived next to a bot that is ready to swing.
+{
+  const a = arena({bots: true});
+  // the 0.3 itch to arm has to actually be rolled, so this block cannot fix Math.random the way the
+  // pocket check above does - it borrows the stream at a fixed seed instead and gives it back
+  const back = seedAt(0x5eed1);
+  try {
+    const {b: man} = rider(a, 'LOK', 20, 30, 'R');
+    const bot = a.spawn('', true);
+    // the condition reads EVERY other bike, so the board is cut down to the one neighbour
+    for (const o of [...a.bikes.values()]) if (o !== man && o !== bot) a.bikes.delete(o.id);
+    // put the bot back on the same spot with a full charge each time: 400 rolls at 0.3 arms it for
+    // certain if the rule lets it, so -1 means the rule refused rather than the dice being cold
+    Object.assign(bot, {x: 23, y: 30});   // think() never moves a bike, so placing it once is enough
+    const rolls = () => {
+      Object.assign(bot, {dir: 'R', want: false, blade: false, bladeFor: 0, charge: 600});
+      for (let i = 0; i < 400; i++) { a.think(bot); if (bot.want) return i; }
+      return -1;
+    };
+    is(man.start, 0, 'the rider joined on the tick the arena started');
+    is(Math.abs(bot.x - man.x) + Math.abs(bot.y - man.y), 3, 'and the bot is well inside the 7 cells that interest it');
+    is(rolls(), -1, 'a bot beside a rider 0s old leaves its blade off through 400 chances to swing');
+    a.tick = 20;
+    is(rolls(), -1, 'and still at exactly 2.0s, the last tick the grace covers');
+    a.tick = 21;
+    assert(rolls() >= 0, 'one tick past 2s it arms the blade for the same rider in the same spot');
+    is(bot.bladeFor > 0, true, 'and holds it out for a stretch rather than a single tick');
+  } finally { back(); }
+}
+
 // ---- hearing about it when something breaks ----
 // The one endpoint a stranger can write to, so everything it accepts is checked here, and so is the
 // thing that would actually cost money: none of it may start the tick.
