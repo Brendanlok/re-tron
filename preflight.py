@@ -149,6 +149,25 @@ def arena_verdict(dirty, changed, live, up, now):
         d += ', arena awake %d min and it woke after the deploy' % (up // 60)
     return not dirty and fresh and riding, d
 
+# Check 5b's answer, split out for the reason the last two were: the number is TRUE and can still
+# say nothing at all. The referee counts lost runs on the INSTANCE, and /count's own clock says how
+# old that instance is - so on a cold arena, which is most runs of this list because the pulse check
+# below is what wakes it, "none lost" is a true statement about a window a few seconds wide and it
+# reads exactly like a clean bill of health over yesterday's players. Nothing was wrong with the
+# count; what was wrong was reading it without its window. Say which of the two answers it is.
+def lost_verdict(lost, turned, up):
+    d = "%d lost" % lost
+    if up is None:
+        d += ", and the arena would not say how long it has been awake, so there is no window to read that over"
+    elif up < 120:
+        d += (", but the arena woke %ds ago - this list is most likely what woke it - so this says"
+              " nothing about the runs players made before that" % up)
+    else:
+        d += " in the %d min the arena has been awake" % (up // 60)
+    if turned:
+        d += ", and %d note(s) refused by the flood guards - read the log" % turned
+    return not lost, d
+
 # runs before the network checks, so proving it costs nothing: python preflight.py --self-check
 if '--self-check' in sys.argv:
     assert board_todo(JUNK, datetime.date(2026, 10, 3)) == (JUNK, False), 'junk before launch day is not fatal'
@@ -208,6 +227,13 @@ if '--self-check' in sys.argv:
     assert not arena_verdict('', T, dep, 120, T)[0], 'a source newer than the deploy still fails, as it always did'
     assert not arena_verdict(' M server/src/index.js', src, dep, 120, T)[0], 'and so do uncommitted server edits'
     print('ok   arena_verdict: a current deployment is not a current ARENA, and the stale window says wait')
+    assert lost_verdict(0, 0, 600)[0], 'nothing lost over a real window is the healthy case'
+    assert not lost_verdict(2, 0, 600)[0], 'a lost run is a fault whatever the window'
+    assert 'nothing about the runs players made' in lost_verdict(0, 0, 3)[1],         'a window this list opened itself must not read as a clean bill of health'
+    assert 'nothing about' not in lost_verdict(0, 0, 600)[1], 'a real window must not hedge'
+    assert 'no window' in lost_verdict(0, 0, None)[1], 'an arena that will not say its age gives nothing to read the count over'
+    assert lost_verdict(0, 3, 600)[0] and 'refused' in lost_verdict(0, 3, 600)[1],         'refused notes are named but are not a run going missing'
+    print('ok   lost_verdict: none lost over a three-second window is not a clean bill of health')
     print('ok   board_todo: finds the junk, spares a real run, and only turns fatal on launch day')
     assert verdict([]) == 'all good', 'a clean run still reads all good'
     assert verdict([BOARD]).startswith('NOT YET'), 'the board alone is a job, not a fault'
@@ -302,10 +328,8 @@ for p, key in (('/count', 'on'), ('/top', 'all')):
 try:
     st, b = get(ARENA + '/count')
     d = json.loads(b) if st == 200 else {}
-    lost, turned = d.get('lost', 0), d.get('turned', 0)
-    check('no run has gone missing in the arena', not lost,
-          '%d lost since the arena woke' % lost
-          + (', and %d note(s) refused by the flood guards - read the log' % turned if turned else ''))
+    check('no run has gone missing in the arena',
+          *lost_verdict(d.get('lost', 0), d.get('turned', 0), d.get('up')))
 except Exception as e:
     check('no run has gone missing in the arena', False, repr(e))
 
