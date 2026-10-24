@@ -895,8 +895,11 @@ function ride(a, name, y0, kos = 0) {
 // referee before the fix - two RIDER1s and one row. So the fallback has to be UNIQUE, not non-empty.
 {
   const a = arena({board: true});
-  for (let i = 0; i < 900; i++)
+  const held = new Set();
+  for (let i = 0; i < 900; i++) {
+    held.add('RIDER' + (100 + i));
     a.sql.exec('INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)', TODAY, 'RIDER' + (100 + i), 1, 0.1, 0, i);
+  }
   const one = ride(a, '', 2, 2);        // 25 points
   a.reset();                            // exactly what stop() does when the last socket goes
   const two = ride(a, '', 30);          // 3 points
@@ -905,8 +908,17 @@ function ride(a, name, y0, kos = 0) {
     'and two strangers either side of a reset still get different ones (' + one.name + ', ' + two.name + ')');
   assert(one.name.length <= 8 && two.name.length <= 8,
     'still inside the 8 characters a typed name is cut to (' + one.name + ', ' + two.name + ')');
-  assert(!/^RIDER[0-9]{3}$/.test(one.name),
-    'and it is not one of the three-digit names the board already holds (' + one.name + ')');
+  // THIS was the one flaky check in the suite - the 23 Oct red, caught and named on 24 Oct by running
+  // the suite 120 times. It used to read the SHAPE of the name and fail anything matching RIDER plus
+  // three digits, and the referee was never wrong: the fallback writes a base-36 number padded to
+  // three characters, so 100 of its 46,656 names (000 to 099) come out all digits and LOOK like pool
+  // names while being none of them. The board holds RIDER100 to RIDER999, so RIDER002 is free, unique
+  // and exactly what the referee should hand out - seed 2244139624 is that run, and it is green now.
+  // What this block has to prove is that the name dodges the BOARD, so read the board rather than
+  // guess from the spelling. Proved to still have teeth: with riderName made to hand back a name off
+  // the board, this line goes red. 180 runs green after the change.
+  assert(!held.has(one.name),
+    'and it is not one of the 900 names the board already holds (' + one.name + ')');
   is(a.top(TODAY).filter(r => r[0] === one.name || r[0] === two.name).length, 2,
     'so the board carries both of their runs rather than merging them into one');
   is(a.top(TODAY)[0] && a.top(TODAY)[0][1], 25, 'with the better run on top, as any other pair would be');
