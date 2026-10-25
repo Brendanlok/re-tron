@@ -6,7 +6,7 @@ posted.** Announcing the game is Lok's call; this folder only has the pieces rea
 Live link: https://brendanlok.github.io/re-tron/
 
 The regression list runs as one command from the repo root: `python preflight.py`.
-Seventeen checks, every one of them something that has gone stale silently before: the live
+Every check on it is something that has gone stale silently before: the live
 link serves the page in this folder, the itch zip holds this folder's eight files, THE PAGE OPENS THAT
 SAME ARENA, the preview image and every icon still resolve, the arena answers the menu's
 two questions, the DEPLOYED worker is the server in this folder (it reads the last deploy
@@ -19,7 +19,7 @@ referee writes nothing down: unlike `server/test-arena.mjs`, this one is safe to
 the live arena and does so by default. Run it on its own with
 `node server/live-pulse.mjs`.
 
-The third is the only one that asks the page itself. Every other check here talks to the
+THE PAGE OPENS THAT SAME ARENA is the only check that asks the page itself. Every other check here talks to the
 arena by the address written at the top of `preflight.py`, so none of them would notice a
 page aimed somewhere else: the link would serve, the zip would match, the arena would answer
 and ride, and the whole list would go green over a game that loads perfectly and then says
@@ -30,7 +30,7 @@ It reads the live branch out of the page and compares it, so a typo, another ren
 session that swapped the two branches and committed it all fail loudly. Asserted all three
 ways with `python preflight.py --self-check`, which runs offline before any network call.
 
-The fifteenth watches the BILL rather than the players: it asks the deployed arena whether
+One check watches the BILL rather than the players: it asks the deployed arena whether
 it stops ticking once the last rider hangs up. The Durable Object is charged for wall-clock
 time whenever it is awake and the arena ticks ten times a second, so one that keeps running
 on an empty board spends the free allowance all night — and nothing visible says so, because
@@ -47,7 +47,7 @@ requests, and a scratch copy with `stop()` neutered still read as healthy). The 
 logic is asserted both ways instead — `node server/idle-stop.mjs --self-check`. Green here
 means the live arena's clock did reset: strong evidence, not a proof.
 
-The sixteenth is the only one pointed at a channel that is MEANT to fail quietly: `/say`,
+One check is pointed at a channel that is MEANT to fail quietly: `/say`,
 behind the in-game "Something broken? Tell us" box and behind the page's own crash reports.
 `index.html` fires those through `.catch(() => {})` on purpose, so a dead channel never breaks
 the game on top of being dead, and the Tell-us box admits a failure only to the one player
@@ -64,20 +64,35 @@ which is why `/inbox?key=YOURKEY` is still worth opening by hand on the day and 
 after. It leaves one note per run under the name PREFLIGHT saying to ignore it. It never calls
 `start()`, so it cannot wake the tick or touch the board.
 
-The seventeenth is the only one aimed at a job rather than a fault, and it is YOURS: the
-all-time board still carries four runs nobody played (SDF 29, TEST 21, LOK 7, TWO 1), so
-the board a first visitor meets says the record is twenty seconds. Wipe it before you
-announce. The key goes in the URL, not a header, so in PowerShell it is one line:
+The board check is the only one aimed at a job rather than a fault, and it is YOURS: the
+all-time board still carries test runs nobody played, so the board a first visitor meets
+says the record is twenty seconds. Clear it before you announce. The key goes in the URL,
+not a header, so in PowerShell each of these is one line.
+
+READ THE BOARD OFF THE CHECK, NOT OFF THIS PAGE. A wipe takes every row it is not told to
+spare, and the board moves while this file does not: as of 25 Oct it is five rows, not the
+four test runs this paragraph used to list - SDF 29, TEST 21, LOK 7, TWO 1, and AAA 1,
+which is a real one-second ride logged on 21 Oct (most likely your own phone). `wipe=1`
+would take AAA with the junk. The check already knows the difference: it prints the board
+it found, marks every row that is not one of the four test runs, and when there is one it
+prints the drop-by-name line as well. Run `python preflight.py` and paste from what it
+says - these two lines are here to be recognised, not copied blind.
+
+To drop the junk one rider at a time and keep a real run (what today's board wants - four
+of these, one per test name):
+
+    irm -Method POST "https://re-tron.chanlokk97.workers.dev/board?name=SDF&key=YOURADMINKEY"
+
+To empty the board outright, once nothing on it is worth keeping:
 
     irm -Method POST "https://re-tron.chanlokk97.workers.dev/board?wipe=1&key=YOURADMINKEY"
 
-That clears Today and All time together - they are the same runs table read two ways, so
-there is nothing to clear separately. The reply lists whatever is left, so an empty list
-is your confirmation and there is no second command to run. Swap `wipe=1` for `name=SDF`
-to drop one rider instead.
+Either way it clears Today and All time together - they are the same runs table read two
+ways, so there is nothing to clear separately. The reply lists whatever is left, so that
+reply is your confirmation and there is no second command to run.
 
 While the key is in your hand, read the player inbox - it is the one thing no unattended
-session can check, because the sixteenth check can prove a note was accepted and never that
+session can check, because that check can prove a note was accepted and never that
 it reads back. Clear this list's own test notes first or they sit on top of the real reports
 (every run that is not `--no-note` leaves one, newest first):
 
@@ -93,7 +108,7 @@ LOK is a name a real player may ride under. Both halves are asserted:
 
 Green means go - and no TODO line under it.
 
-On launch morning expect the FIRST run to end red, because that seventeenth check is a job
+On launch morning expect the FIRST run to end red, because the board check is a job
 and you have not done it yet. It says so in words rather than leaving you to work it out
 from a count: the last line reads `NOT YET - every check of the game itself passed. The one
 thing left is a JOB, not a fault`, followed by the wipe line again. A plain `1 FAILED` over
