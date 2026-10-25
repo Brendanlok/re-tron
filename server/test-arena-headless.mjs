@@ -32,7 +32,8 @@ console.log('seed  ' + SEED + '   (SEED=' + SEED + ' node server/test-arena-head
 // were green. A rare red is the one that most needs its name kept; say it again at the end, where the
 // one line everybody reads already is.
 const fails = [];
-const assert = (c, m) => { if (c) console.log('ok   ', m); else { console.log('FAIL ', m); fails.push(m); } };
+let ran = 0;
+const assert = (c, m) => { ran++; if (c) console.log('ok   ', m); else { console.log('FAIL ', m); fails.push(m); } };
 
 // And a check that THROWS rather than failing takes that list down with it: the suite stops where it
 // stood, nothing prints the summary at the foot of this file, and the last three lines are a node stack
@@ -2288,8 +2289,20 @@ async function joinSnapshot(a) {
   assert(zRot > zMenu, 'and it is above the menu rather than behind it (' + zRot + ' over ' + zMenu + ')');
 }
 
+
+// A check that is no longer RUN says nothing at all. The throw above is caught and named, but a section
+// that quietly stops matching - an early return, a guard whose shape changed, a block left unreachable -
+// takes its checks out of the run and prints 'all good' over a shorter list. Nothing in here noticed it:
+// the only tripwire was the count a session typed into the devlog by hand, and on 2026-10-25 one of
+// those read 468 against the 484 that really ran, so the tripwire was already wrong. Count the checks
+// here and hold the number to a floor. Adding checks is always fine; losing them is a red.
+// Raise FLOOR when you add some and mean to keep them.
+const FLOOR = 484;
+if (ran < FLOOR) fails.push('only ' + ran + ' checks ran, fewer than the ' + FLOOR
+  + ' this file is meant to hold - some went unrun without ever failing');
+
 console.log(fails.length
   ? '\n' + fails.length + ' FAILED - ride this arena again:  SEED=' + SEED
     + ' node server/test-arena-headless.mjs\n' + fails.map(m => '  ' + m).join('\n')
-  : '\nall good');
+  : '\nall good - ' + ran + ' checks');
 process.exit(fails.length ? 1 : 0);
