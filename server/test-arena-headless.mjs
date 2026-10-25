@@ -2297,6 +2297,10 @@ async function joinSnapshot(a) {
 // those read 468 against the 484 that really ran, so the tripwire was already wrong. Count the checks
 // here and hold the number to a floor. Adding checks is always fine; losing them is a red.
 // Raise FLOOR when you add some and mean to keep them.
+// PROVED RED 2026-10-25 by a later session rather than by the one that wrote it, because a tripwire
+// nobody has seen fire is just another claim: the last section was turned into if (false) { so its
+// seven checks left the run without failing, and this is what caught it - 477 against the floor, exit
+// 1, while every check that did run still printed ok. The real file exits 0 on the same machine.
 const FLOOR = 484;
 if (ran < FLOOR) fails.push('only ' + ran + ' checks ran, fewer than the ' + FLOOR
   + ' this file is meant to hold - some went unrun without ever failing');
