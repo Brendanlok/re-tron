@@ -111,6 +111,37 @@ def zip_drift(inzip, repo):
     return (['missing: ' + n for n in repo if n not in inzip]
             + ['stale: ' + n for n in repo if n in inzip and inzip[n] != repo[n]])
 
+# Checks 2 and 4 both walk ASSETS, and ASSETS is a list a person types. Nothing tied it to what the
+# game actually asks a browser to fetch, so a file added to the page fell outside BOTH of them at
+# once: never compared against Pages, and never packed into the itch zip, where it 404s on the one
+# day the zip gets downloaded. Same class as the suite's check count, closed this morning - a list
+# kept by hand with nothing counting it - and the same shape as every other check here, which is a
+# thing the prose in press/launch-copy.md told you to remember. Read the refs off the page and the
+# manifest instead and insist the list covers them. The absolute case earns its own answer: og:image
+# is named in full, so the repo rename could have left it on the dead /tron/ path, and a preview
+# pointing there fails nowhere a player can see - only in the announcement post, to everyone.
+ASSET_EXT = ('.png', '.svg', '.json', '.jpg', '.jpeg', '.webp', '.gif', '.ico', '.css', '.js',
+             '.mp3', '.wav', '.ogg', '.webmanifest')
+
+def ref_drift(page, manifest, zipped, live):
+    refs = set(re.findall(r'(?:href|src|content)="([^"]*)"', page))
+    try:
+        refs |= {i.get('src', '') for i in json.loads(manifest).get('icons', [])}
+    except Exception as e:
+        return ['manifest.json will not parse: ' + repr(e)]
+    out = []
+    for u in refs:
+        if not u.lower().endswith(ASSET_EXT): continue
+        if u.startswith(live): u = u[len(live):]            # the preview is named in full
+        elif '//' in u:
+            # an absolute url to a file that is NOT under the live link. Another host is somebody
+            # else's file and none of our business; our own host is the rename hazard.
+            if 'github.io' in u: out.append('off the live link: ' + u)
+            continue
+        if u.startswith('./'): u = u[2:]
+        if u not in zipped: out.append('not on the list: ' + u)
+    return sorted(out)
+
 # Split out so both answers can be asserted offline, the way zip_drift is. The 404 and the stale
 # copy are DIFFERENT faults and the detail has to say which: a 404 means the file never went up or
 # the path moved, a byte mismatch means a push has not landed yet - and Pages catching up is a wait,
@@ -208,6 +239,16 @@ if '--self-check' in sys.argv:
     assert zip_drift({'a': b'1', 'b': b'OLD'}, {'a': b'1', 'b': b'2'}) == ['stale: b'], 'a file the zip has an older copy of is named as stale'
     assert zip_drift({'a': b'1', 'b': b'2', 'spare': b'x'}, {'a': b'1', 'b': b'2'}) == [], 'a spare file in the zip is harmless, not a fault'
     print('ok   zip_drift: tells a file missing from the zip from a stale one, and ignores spares')
+    PAGE = '<link rel="icon" href="favicon.svg"><meta property="og:image" content="' + LIVE + 'og.png">'
+    MAN = json.dumps({'icons': [{'src': 'icon-192.png'}]})
+    assert ref_drift(PAGE, MAN, ZIPPED, LIVE) == [], 'the page as it stands asks for nothing off the list'
+    assert ref_drift(PAGE + '<img src="splash.png">', MAN, ZIPPED, LIVE) == ['not on the list: splash.png'],         'a file added to the page is named, because nothing else would check it or pack it'
+    assert ref_drift(PAGE, json.dumps({'icons': [{'src': 'icon-new.png'}]}), ZIPPED, LIVE) == ['not on the list: icon-new.png'],         'and so is one added to the manifest, which is the half no reading of the page can see'
+    assert ref_drift('<meta content="https://brendanlok.github.io/tron/og.png">', MAN, ZIPPED, LIVE) ==         ['off the live link: https://brendanlok.github.io/tron/og.png'],         'the preview left on the dead /tron/ path is named, not skipped as a foreign file'
+    assert ref_drift('<meta content="https://example.com/badge.png">', MAN, ZIPPED, LIVE) == [],         "but a file on another host is not ours to serve, check or pack"
+    assert ref_drift('<meta content="Re-Tron - Tron, in reverse"><meta content="1200">', MAN, ZIPPED, LIVE) == [],         'the other meta content lines are prose and numbers, not files'
+    assert 'will not parse' in ref_drift(PAGE, '{oops', ZIPPED, LIVE)[0], 'a manifest that will not parse is said out loud, not read as clean'
+    print('ok   ref_drift: the asset list must cover what the page and the manifest actually fetch')
     short = lambda b: hashlib.sha256(b).hexdigest()[:12]
     assert asset_verdict(200, b'png', b'png', short)[0], 'the file that is served and matches is the healthy case'
     assert not asset_verdict(404, b'', b'png', short)[0], 'a 404 is a fault'
@@ -288,6 +329,18 @@ got = page_arena(here.decode('utf8', 'replace'))
 detail = got or 'no live branch found in the SERVER line'
 if got != want: detail += ' - expected ' + want
 check('the page opens that same arena', got == want, detail)
+
+# 3b. and the list the next two checks walk really is everything the game asks a browser for. This
+# one is pure and offline; it is here rather than up with the others because it reads the page bytes
+# check 1 has just tied to the live link.
+try:
+    drift = ref_drift(here.decode('utf8', 'replace'), open('manifest.json', encoding='utf8').read(), ZIPPED, LIVE)
+    check('the asset list is everything the page asks for', not drift,
+          ('%d files, and nothing the page or the manifest fetches is missing from it' % len(ZIPPED))
+          if not drift else ', '.join(drift)
+          + ' - add it to ASSETS at the top of this file, then python press/pack-zip.py')
+except Exception as e:
+    check('the asset list is everything the page asks for', False, repr(e))
 
 # 4. the preview and the icons resolve, and are the files in this folder - a rename leaves these
 # pointing at a 404, and a push that landed only in part leaves the OLD ones up. Non-empty was all
