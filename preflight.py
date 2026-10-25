@@ -2,7 +2,7 @@
 # Every check here is one that has silently drifted before - the itch zip went stale twice on
 # 1 Oct without anyone noticing, and the repo rename could have left the preview pointing at a
 # dead /tron/ path. Prose in press/launch-copy.md told you to check these; nothing ran them.
-import datetime, hashlib, json, os, re, subprocess, sys, urllib.error, urllib.request, zipfile
+import ast, datetime, hashlib, json, os, re, subprocess, sys, urllib.error, urllib.request, zipfile
 
 LIVE = 'https://brendanlok.github.io/re-tron/'
 ARENA = 'https://re-tron.chanlokk97.workers.dev'
@@ -282,6 +282,20 @@ if '--self-check' in sys.argv:
     assert verdict([BOARD, 'the live link is the page in this folder']).startswith('2 FAILED'), 'a real fault beside the board must not get the softer wording'
     assert verdict([BOARD + ' - could not read the board']).startswith('1 FAILED'), 'an unreadable board is a fault, not the wipe job'
     print('ok   verdict: the board alone reads as a job, and any real fault still reads FAILED')
+    # The ten lines above are hand-typed claims about the asserts beside them, and nothing held them
+    # to it. An assert deleted - or a whole group moved out to another file - prints the same ten
+    # greens over a shorter run. That is the hole the arena suite had until 02:xx today: the only
+    # thing counting its checks was a person, and that number had already drifted by sixteen. Count
+    # them here instead, off this file's own syntax tree so that prose ABOUT asserts cannot pad the
+    # number, and hold the count to a floor. Adding asserts is always fine; losing them is a red.
+    # Raise FLOOR when you add some and mean to keep them. The ceiling, so nobody reads more into
+    # this line than it says: it counts what is WRITTEN in this file, not what RAN, so a group left
+    # unreachable behind a false guard would still pass here - if that ever happens, give each assert
+    # a counting helper the way server/test-arena-headless.mjs does.
+    FLOOR = 57
+    n = sum(isinstance(x, ast.Assert) for x in ast.walk(ast.parse(open(__file__, encoding='utf8').read())))
+    assert n >= FLOOR, 'only %d asserts left in this file, fewer than the %d it is meant to hold'         ' - some have gone missing without ever failing' % (n, FLOOR)
+    print('ok   %d asserts in this list, and the floor says none have gone missing' % n)
     sys.exit(0)
 
 # Cloudflare's bot protection sits in front of the arena and turns Python-urllib away with a 403
