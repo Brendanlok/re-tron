@@ -2,7 +2,7 @@
 
 Online light cycles: one shared arena, join any time.
 
-Your bike leaves nothing behind until you switch on the blade. Then it lays a wall that knocks out anyone who rides into it, you included. The blade runs on charge: about 3s of wall per full charge, 6s to recharge, and a 1s wait if you run it dry. Bots top the arena up to 6 bikes when it is quiet. Walls fade after 8s and vanish when their owner is knocked out.
+Your bike leaves nothing behind until you switch on the blade. Then it lays a wall that knocks out anyone who rides into it, you included. The blade runs on charge: about 3s of wall per full charge, 6s to recharge, and a 1s wait if you run it dry. Bots top the arena up to 6 bikes when it is quiet. Walls fade after 8s and vanish when their owner is knocked out. A run is worth 1 point for every whole second you stay alive, and 10 for every knockout.
 
 - `index.html` — the game page (GitHub Pages: https://brendanlok.github.io/re-tron/), no build step.
 - `server/` — the arena, a Cloudflare Worker + Durable Object that moves every bike and decides every crash.

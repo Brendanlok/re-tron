@@ -190,7 +190,7 @@ const standing = (a, id) => [...a.owner].filter(o => o === id).length;
   is(standing(a, id), 0, 'a knocked-out rider takes their barricades with them');
   is(a.bikes.size, 0, 'and leaves the arena');
   is(a.runs.length, 1, 'the referee wrote the run down');
-  is(a.runs[0][2], ev[3], 'with the score it gave the rider, which the client never sends');
+  is((a.runs[0] || [])[2], ev[3], 'with the score it gave the rider, which the client never sends');
 }
 
 // ---- two bikes swapping cells both go: the case a naive "is that cell taken" check misses ----
@@ -982,8 +982,8 @@ function ride(a, name, y0, kos = 0) {
     a.sql.exec('INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)', TODAY, 'R' + i, 100 - i, 10.0, 0, i);
   const rows = a.top(TODAY);
   is(rows.length, 10, 'the board stops at ten');
-  is(rows[0][0], 'R0', 'highest score first');
-  is(rows[9][0], 'R9', 'down to the tenth best');
+  is((rows[0] || [])[0], 'R0', 'highest score first');
+  is((rows[9] || [])[0], 'R9', 'down to the tenth best');
 }
 
 // ---- the board answer is held, so a busy day does not read the whole table once per visitor ----
@@ -1012,13 +1012,13 @@ function ride(a, name, y0, kos = 0) {
   const before = n.top;
   await top(); await top(); await top();
   is(n.top - before, 0, 'the next three visitors are answered without touching the table at all');
-  is((await top()).all[0][0], 'LOK', 'and are told exactly what the first one was told');
+  is(((await top()).all[0] || [])[0], 'LOK', 'and are told exactly what the first one was told');
 
   // the half that matters: a run finishing must show on the very NEXT visitor, not the one after
   ride(a, 'SDF', 45, 9);                   // 1.5s and 9 knockouts, so it beats LOK's 5
   const after = await top();
   is(after.all.length, 2, 'a run that just ended is on the board the next time anyone looks');
-  is(after.all[0][0], 'SDF', 'in its right place, best first');
+  is((after.all[0] || [])[0], 'SDF', 'in its right place, best first');
   is(after.today.length, 2, 'and on Today as well, which is the board the player is sent to');
 
   // the launch-morning wipe is the other write, and it must not be a board that empties later
@@ -1033,7 +1033,7 @@ function ride(a, name, y0, kos = 0) {
   await a.fetch(new Request('https://arena.test/board?name=SDF', {method: 'POST'}));
   const dropped = await top();
   is(dropped.all.length, 1, 'dropping one rider shows on the next visitor as well');
-  is(dropped.all[0][0], 'LOK', 'and it is the other rider who is left');
+  is((dropped.all[0] || [])[0], 'LOK', 'and it is the other rider who is left');
 }
 
 // A held answer is only ever OLD. The one way it could be WRONG is midnight UTC: a warm instance
@@ -1049,7 +1049,7 @@ function ride(a, name, y0, kos = 0) {
   const fresh = a.topAnswer();
   is(fresh.day, TODAY, 'an answer built on a previous day is not handed out after the day turns');
   is(fresh.today.length, 1, 'Today is read again rather than carried over');
-  is(fresh.today[0][0], 'LOK', "and holds today's runs, not yesterday's");
+  is((fresh.today[0] || [])[0], 'LOK', "and holds today's runs, not yesterday's");
 }
 
 // riderName() is the third read, and the worst of them: it runs on every anonymous join, which on
@@ -1719,7 +1719,10 @@ function ride(a, name, y0, kos = 0) {
     // README.md states the same balance in digits rather than words, and it is the first thing anyone
     // reading the repo is told. It also carries the one number neither press file mentions - the 1s the
     // charge waits at zero after running dry - so without this it was the only public statement of that
-    // rule with nothing holding it to the referee.
+    // rule with nothing holding it to the referee. The SCORING rule is the second of those, added here
+    // 2026-10-28: the page tells the player 'a point a second, ten for every knockout' and the board
+    // agrees, but no file in this repo wrote the rule down, so the only statement of it a session could
+    // read was the scheduled-task brief - which has it wrong by a factor of ten (it says seconds/10).
     'README.md': readFileSync(new URL('../README.md', import.meta.url), 'utf8').replace(/\s+/g, ' ')};
   const blade = secs('BLADE_TICKS'), recharge = secs('RECHARGE_TICKS'), wall = secs('WALL_TICKS');
   const target = num('TARGET'), perKo = ko ? Number(ko[1]) : 0, dry = secs('EMPTY_GAP');
@@ -1739,6 +1742,8 @@ function ride(a, name, y0, kos = 0) {
     ['the charge waits ' + dry + 's at zero', 'README.md', 'a $s wait if you run it dry', dry, 1],
     ['a wall stands for ' + wall + 's', 'README.md', 'fade after $s', wall, 1],
     ['bots top the arena up to ' + target + ' bikes', 'README.md', 'up to $ bikes', target, 1],
+    ['a second alive is worth 1 point', 'README.md', '$ point for every whole second', 1, 1],
+    ['a knockout is worth ' + perKo, 'README.md', '$ for every knockout', perKo, 1],
   ];
   for (const [rule, file, phrase, value, digits] of claims) {
     const want = phrase.replace('$', digits ? value : WORD[value] || '(' + value + ' - no word for it)');
@@ -2444,7 +2449,7 @@ async function joinSnapshot(a) {
 // nobody has seen fire is just another claim: the last section was turned into if (false) { so its
 // seven checks left the run without failing, and this is what caught it - 477 against the floor, exit
 // 1, while every check that did run still printed ok. The real file exits 0 on the same machine.
-const FLOOR = 484;
+const FLOOR = 519;
 if (ran < FLOOR) fails.push('only ' + ran + ' checks ran, fewer than the ' + FLOOR
   + ' this file is meant to hold - some went unrun without ever failing');
 
