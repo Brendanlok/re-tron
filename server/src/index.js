@@ -338,7 +338,13 @@ export class Arena {
       try {
         this.sql.exec('INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)',
           today(), b.name, score, Math.round(secs * 10) / 10, b.kos, Date.now());
-        this.memo = {};   // the board just changed; the held answers are stale (see the constructor)
+        // the board just changed, so the held /top answer is stale (see the constructor). The held
+        // NAME list is not: an INSERT can only ADD to the DISTINCT name set, and this is the name it
+        // added - so it is carried over rather than re-read. That read is the one that runs on every
+        // anonymous join, so dropping it here spent a full-table scan per visitor to learn a name we
+        // already had. Only a DELETE can take a name OUT, and board() drops the whole memo for that.
+        const names = this.memo.names;
+        this.memo = names ? {names: names.includes(b.name) ? names : [...names, b.name]} : {};
       } catch (e) { this.lost++; console.error('run not recorded', e); }
   }
 

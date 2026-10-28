@@ -1074,10 +1074,29 @@ function ride(a, name, y0, kos = 0) {
   assert(!taken.has(one) && !taken.has(two), 'and neither is a name the board already holds');
   assert(one !== two, 'and they are not the same name as each other, held list or not');
   // and the write that stales it is the same one as the board's
+  // and the write that stales the BOARD answer does not stale this one. An INSERT can only ADD to the
+  // DISTINCT name set, and the referee knows which name it added, so it carries the list over. The
+  // whole point of the list is that a name on the board is never handed out, so the carried list has
+  // to hold the name that was just written - the two checks below are that promise, not the saving.
   const b = {bot: false, name: 'FRESH', kos: 0, start: 0, alive: true, sock: null, id: 9};
   a.bikes.set(9, b); a.tick = 60; a.kill(b, 0, 'edge');
   a.riderName(3);
-  is(reads, 2, 'a run finishing makes the next anonymous rider read the board again');
+  is(reads, 1, 'a run finishing does not send the next anonymous rider back to the table');
+  assert((a.memo.names || []).includes('FRESH'), 'because the name it just wrote was added to the held list');
+  is((a.memo.names || []).filter(n => n === 'FRESH').length, 1, 'once, however many runs that rider finishes');
+  a.kill(Object.assign(b, {alive: true}), 0, 'edge');
+  is((a.memo.names || []).filter(n => n === 'FRESH').length, 1, 'and a second run under the same name adds nothing');
+  // the saving is real but it is the smaller half: what must not happen is the name being handed out
+  const names900 = a.memo.names || [];
+  a.memo = {names: names900.filter(n => n !== 'FRESH')};   // as if the carry had been forgotten
+  const stale = a.riderName(4);
+  is(reads, 1, 'a list that was never dropped is still never re-read');
+  // a DELETE is the one write that can take a name out, so that one drops the whole held answer
+  a.memo.names = ['ONLY'];
+  a.sql.exec = real;                        // the admin path reads the table to answer, which is fine
+  await a.fetch(new Request('https://arena.test/board?name=NOBODY', {method: 'POST'}));
+  is(a.memo.names, undefined, 'an admin delete drops the held name list, because a delete can remove one');
+  assert(typeof stale === 'string', 'and a rider is still given a name throughout');
 }
 
 // A storage fault must not be held on to: the board comes back when storage does, rather than staying
