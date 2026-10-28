@@ -89,6 +89,22 @@ export class Arena {
     // here and never in reset(), for the same reason this.lost is: the ride is rebuilt when the last
     // rider leaves, the instance and its code are exactly as old as they were.
     this.woke = Date.now();
+    // THE BOARD IS READ FAR MORE OFTEN THAN IT CHANGES, and every read of it walks the whole table.
+    // Three of them do: /top groups by name twice (today and all time), and riderName() reads every
+    // DISTINCT name on every anonymous join, which on launch day is most of them. The page asks /top
+    // on every menu view AND again after every run, so rows read grows with visitors TIMES runs on the
+    // board - measured 2026-10-25, the free allowance for rows read is spent partway through a day of
+    // about 790 visitors and the board then goes dark until midnight UTC. That measurement concluded
+    // the only lever was the SIZE of the table, which would mean deleting runs players can see; the
+    // lever it missed is the NUMBER OF TIMES the query runs. Nothing about the table changes between
+    // those reads, so the answers are kept here and handed out again until something writes to runs -
+    // which happens in exactly three places (the score write in kill, and the two admin deletes in
+    // board), all of them inside this one object, so dropping it there is complete rather than hopeful.
+    // A cold instance recomputes exactly as before; a busy one - the only case that can reach the
+    // allowance - reads the table once instead of once per visitor.
+    // ponytail: a held answer, not a cache. No size, no expiry, no timer, so it cannot keep the arena
+    // awake and cannot cost a second of duration. Give it a real one only if the table ever needs it.
+    this.memo = {};
     this.reset();
   }
   reset() {
@@ -136,7 +152,7 @@ export class Arena {
     // admits it, which is the only way anyone outside this object ever finds out.
     try {
       // the board, read the same cheap way: the menu asks for it without ever waking the arena
-      if (path === '/top') return Response.json({day: today(), today: this.top(today()), all: this.top(null)},
+      if (path === '/top') return Response.json(this.topAnswer(),
         {headers: {'access-control-allow-origin': '*'}});
       // awaited rather than handed straight back: say() is async, so its rejection would sail past a
       // sync catch and be the same uncaught 500 all over again
@@ -322,6 +338,7 @@ export class Arena {
       try {
         this.sql.exec('INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)',
           today(), b.name, score, Math.round(secs * 10) / 10, b.kos, Date.now());
+        this.memo = {};   // the board just changed; the held answers are stale (see the constructor)
       } catch (e) { this.lost++; console.error('run not recorded', e); }
   }
 
@@ -340,8 +357,12 @@ export class Arena {
     // a throw froze the arena on the FIRST tick and for everyone. Without the board the walk below
     // still returns a name nobody in the arena is using - a possible collision with a name on the
     // board is a far smaller thing than a board nobody can ride on.
-    try { for (const r of this.sql.exec('SELECT DISTINCT name FROM runs')) taken.add(r.name); }
-    catch (e) { this.lost++; console.error('board unreadable', e); }
+    // held like the board answer above it, and for the same reason: this read is the one that runs on
+    // every anonymous join. A throw leaves nothing assigned, so a fault is never held on to.
+    try {
+      if (!this.memo.names) this.memo.names = [...this.sql.exec('SELECT DISTINCT name FROM runs')].map(r => r.name);
+      for (const n of this.memo.names) taken.add(n);
+    } catch (e) { this.lost++; console.error('board unreadable', e); }
     // walk from a random start rather than retrying at random: a free number is then always found
     // rather than usually found, and the names still do not read as a counter
     const walk = (span, label) => {
@@ -367,6 +388,17 @@ export class Arena {
       || 'RIDER' + id;   // 46,656 at once does not happen, but a nameless bike is never written down
   }
 
+  // The whole /top answer, held until something writes to runs. Keyed on the day as well, because a
+  // warm instance carries the held answer across midnight UTC and would otherwise go on calling
+  // yesterday's rows Today - the one way this could tell a player something untrue rather than merely
+  // old. Built only on a miss, so a storage fault throws out to the 503 guard with nothing held.
+  topAnswer() {
+    const day = today();
+    if (!this.memo.top || this.memo.top.day !== day)
+      this.memo.top = {day, today: this.top(day), all: this.top(null)};
+    return this.memo.top;
+  }
+
   // Best run per name, so one rider cannot fill the board. day = null means all time.
   top(day) {
     const where = day ? 'WHERE day = ?' : '', args = day ? [day] : [];
@@ -386,6 +418,7 @@ export class Arena {
       if (q.get('wipe') === '1') this.sql.exec('DELETE FROM runs');
       else if (q.get('name')) this.sql.exec('DELETE FROM runs WHERE name = ?', q.get('name'));
       else return new Response('ask for ?wipe=1 or ?name=RIDER', {status: 400});
+      this.memo = {};   // the launch-morning wipe must show on the very next /top, not the next run
     }
     return Response.json([...this.sql.exec('SELECT day, name, score, secs, kos, at FROM runs ORDER BY at DESC LIMIT 500')]);
   }

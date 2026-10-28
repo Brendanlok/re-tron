@@ -986,6 +986,130 @@ function ride(a, name, y0, kos = 0) {
   is(rows[9][0], 'R9', 'down to the tenth best');
 }
 
+// ---- the board answer is held, so a busy day does not read the whole table once per visitor ----
+// The allowance this game runs out of first is ROWS READ, not duration and not requests (measured
+// 2026-10-25: the board stops answering partway through a day of about 790 visitors). Three reads walk
+// the whole runs table - /top groups by name twice, and riderName() reads every DISTINCT name on every
+// anonymous join - and the page asks /top on every menu view AND again after every run, so the cost
+// grew with visitors TIMES rows. The answers are now held until something writes to runs. What these
+// checks are for is the half that can go WRONG: a held answer that outlives the write that stales it
+// would show a player a board their own run is missing from, which is worse than a slow board.
+{
+  const a = arena({board: true});
+  const n = {top: 0, names: 0};
+  const real = a.sql.exec;
+  a.sql.exec = (q, ...args) => {
+    if (/MAX\(score\)/.test(q)) n.top++;
+    if (/SELECT DISTINCT name/.test(q)) n.names++;
+    return real(q, ...args);
+  };
+  const top = async () => JSON.parse(await (await a.fetch(new Request('https://arena.test/top'))).text());
+
+  ride(a, 'LOK', 2);                       // one run on the board to read
+  const first = await top();
+  is(n.top, 2, 'the first visitor is answered by reading the table, twice: Today and All time');
+  is(first.all.length, 1, 'and gets the board');
+  const before = n.top;
+  await top(); await top(); await top();
+  is(n.top - before, 0, 'the next three visitors are answered without touching the table at all');
+  is((await top()).all[0][0], 'LOK', 'and are told exactly what the first one was told');
+
+  // the half that matters: a run finishing must show on the very NEXT visitor, not the one after
+  ride(a, 'SDF', 45, 9);                   // 1.5s and 9 knockouts, so it beats LOK's 5
+  const after = await top();
+  is(after.all.length, 2, 'a run that just ended is on the board the next time anyone looks');
+  is(after.all[0][0], 'SDF', 'in its right place, best first');
+  is(after.today.length, 2, 'and on Today as well, which is the board the player is sent to');
+
+  // the launch-morning wipe is the other write, and it must not be a board that empties later
+  await a.fetch(new Request('https://arena.test/board?wipe=1', {method: 'POST'}));
+  const wiped = await top();
+  is(wiped.all.length, 0, 'the admin wipe empties the board for the very next visitor too');
+  is(wiped.today.length, 0, 'Today with it');
+
+  // dropping one rider by name is the wipe Lok actually wants, so it is the one checked for real
+  ride(a, 'LOK', 2); ride(a, 'SDF', 2);
+  await top();                              // hold an answer with both of them on it
+  await a.fetch(new Request('https://arena.test/board?name=SDF', {method: 'POST'}));
+  const dropped = await top();
+  is(dropped.all.length, 1, 'dropping one rider shows on the next visitor as well');
+  is(dropped.all[0][0], 'LOK', 'and it is the other rider who is left');
+}
+
+// A held answer is only ever OLD. The one way it could be WRONG is midnight UTC: a warm instance
+// carries it across the day boundary and would go on calling yesterday's runs Today, on the board a
+// player is sent to looking for the run they just rode. The answer is keyed on the day for that.
+{
+  const a = arena({board: true});
+  ride(a, 'LOK', 2);
+  const held = a.topAnswer();
+  is(held.day, TODAY, 'the answer carries the day it was built for');
+  is(held.today.length, 1, "with today's run on Today");
+  a.memo.top = {...held, day: '2026-01-01', today: [['GHOST', 99, 9.9, 0]]};   // as if built before midnight
+  const fresh = a.topAnswer();
+  is(fresh.day, TODAY, 'an answer built on a previous day is not handed out after the day turns');
+  is(fresh.today.length, 1, 'Today is read again rather than carried over');
+  is(fresh.today[0][0], 'LOK', "and holds today's runs, not yesterday's");
+}
+
+// riderName() is the third read, and the worst of them: it runs on every anonymous join, which on
+// launch day is most of them. Holding it must not cost it the thing it is for - a name no run on the
+// board is already using, because the board merges by name and would swallow the quieter rider.
+{
+  const a = arena({board: true});
+  let reads = 0;
+  const real = a.sql.exec;
+  a.sql.exec = (q, ...args) => { if (/SELECT DISTINCT name/.test(q)) reads++; return real(q, ...args); };
+  for (let i = 0; i < 900; i++)
+    a.sql.exec('INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)', TODAY, 'RIDER' + (100 + i), 5, 5.0, 0, i);
+  const one = a.riderName(1);
+  is(reads, 1, 'the first anonymous rider reads the board to find a free name');
+  const two = a.riderName(2);
+  is(reads, 1, 'the next one is given a name without reading it again');
+  assert(/^RIDER[0-9A-Z]{3}$/.test(one) && /^RIDER[0-9A-Z]{3}$/.test(two), 'both are given a name of the usual shape');
+  // every three-digit name was written above, so a held list that had gone stale would hand one back.
+  // Built from the loop rather than read back, because a read here would be counted by the counter.
+  const taken = new Set();
+  for (let i = 0; i < 900; i++) taken.add('RIDER' + (100 + i));
+  assert(!taken.has(one) && !taken.has(two), 'and neither is a name the board already holds');
+  assert(one !== two, 'and they are not the same name as each other, held list or not');
+  // and the write that stales it is the same one as the board's
+  const b = {bot: false, name: 'FRESH', kos: 0, start: 0, alive: true, sock: null, id: 9};
+  a.bikes.set(9, b); a.tick = 60; a.kill(b, 0, 'edge');
+  a.riderName(3);
+  is(reads, 2, 'a run finishing makes the next anonymous rider read the board again');
+}
+
+// A storage fault must not be held on to: the board comes back when storage does, rather than staying
+// dark for the life of the instance. Nothing is assigned on a throw, so there is nothing to hold.
+{
+  const quiet = console.error; console.error = () => {};
+  let broken = true, reads = 0;
+  const rows = [];
+  const sql = {exec: (q, ...args) => {
+    if (/MAX\(score\)|SELECT DISTINCT/.test(q)) {
+      reads++;
+      if (broken) throw new Error('SQLITE_IOERR');
+      return q.includes('DISTINCT') ? [{name: 'TAKEN'}] : rows;
+    }
+    return [];
+  }};
+  const a = new Arena({storage: {sql}});
+  let threw = 0;
+  try { a.topAnswer(); } catch (e) { threw++; }
+  is(threw, 1, 'a board that cannot be read throws out to the 503 guard rather than answering empty');
+  broken = false;
+  is(a.topAnswer().day, TODAY, 'and the very next visitor is answered once storage is back');
+  is(a.lost, 0, 'the throw is counted by the guard that catches it, not twice here');
+  // the same for the name read, which swallows its own fault rather than throwing
+  broken = true; a.memo = {}; const before = reads;
+  a.riderName(1);
+  is(a.lost, 1, 'a board riderName cannot read is counted');
+  broken = false;
+  a.riderName(2);
+  is(reads - before, 2, 'and it reads again next time rather than holding the failure');
+}
+
 // Road at the drop. A rider who presses Start and then spends a second working out which way they are
 // pointing must not be dead before they have touched a control - that is the first thing a launch-day
 // visitor sees, and it reads as the game's fault, not theirs. The arena is 60 tall, so five seconds of
