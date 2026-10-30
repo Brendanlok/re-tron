@@ -1737,6 +1737,14 @@ function ride(a, name, y0, kos = 0) {
     ['bots top the arena up to ' + target + ' bikes', 'itch-description.txt', 'arena at $ bikes', target],
     ['a knockout is worth ' + perKo, 'launch-copy.md', '$ a knockout', perKo],
     ['a knockout is worth ' + perKo, 'itch-description.txt', '$ a knockout', perKo],
+    // the per-second half of the same sentence. Both press files state the rate and neither held it
+    // to the referee, while the per-knockout half of that very sentence was pinned in both and the
+    // README's per-second half was pinned on 28 Oct - so the one unpinned claim was the one in the
+    // text Lok pastes in public. That is the drift that bit on 25 Oct: the code was right and the
+    // prose was wrong. Worded differently in the two files ('per second' / 'a second'), so each is
+    // matched as it is actually written rather than normalised.
+    ['a second alive is worth 1 point', 'launch-copy.md', '$ point per second alive', 1],
+    ['a second alive is worth 1 point', 'itch-description.txt', '$ point a second alive', 1],
     ['the blade lasts ' + blade + 's', 'README.md', 'about $s of wall', blade, 1],
     ['recharging takes ' + recharge + 's', 'README.md', '$s to recharge', recharge, 1],
     ['the charge waits ' + dry + 's at zero', 'README.md', 'a $s wait if you run it dry', dry, 1],
@@ -2449,7 +2457,7 @@ async function joinSnapshot(a) {
 // nobody has seen fire is just another claim: the last section was turned into if (false) { so its
 // seven checks left the run without failing, and this is what caught it - 477 against the floor, exit
 // 1, while every check that did run still printed ok. The real file exits 0 on the same machine.
-const FLOOR = 519;
+const FLOOR = 521;
 if (ran < FLOOR) fails.push('only ' + ran + ' checks ran, fewer than the ' + FLOOR
   + ' this file is meant to hold - some went unrun without ever failing');
 
